@@ -83,7 +83,7 @@ def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg,
     header["CTYPE3"] = "Frequency MHz"
     header["CRVAL3"] = freq
     hdu = fits.PrimaryHDU(image_data, header)
-    hdu.writeto(data_path + filename)
+    hdu.writeto(data_path + filename, overwrite=True)
 
     print('FITS file created for ' + str(freq) + 'MHz')
 
@@ -168,12 +168,11 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
 def main():
     # ----------------------------------------------------------------------------#
-    # code_path = '/Users/facepan/projects/partiii/partiii_yqyp2/'
-    data_path = './OSKAR_data/21cmBiBox/'
+    data_path = './SKA_sim_data/21cmBiBox/'
     sim_name = '_203_0.05_1_35_1_1_24.3_0_0_2_1_2_0_2.6'
-    N_pix = 256
+    N_pix = 256  # Data cube shape
     Dc_pix = 3  # Mpc
-    z_values = range(12, 20)  # integer z from 21cm simulations
+    z_values = range(12, 20)  # redshift integer z from 21cm simulations
     N_z = len(z_values)
 
     """
