@@ -121,13 +121,6 @@ def get_delta_Dc_values(delta_Dc_file):
     return delta_Dc_values
 
 
-"""
--note all the // is meant to give an integer
-I added the values corresponding to the zero value of FT axis but realised that
-log plotting does not make sense at all so I deleted it
-"""
-
-
 # same as Pd_avg_unfolded but with binning
 def get_Pd_avg_unfolded_binning(name1, name2, filepath, N_baselines, freq_values, freq_interval,
                                 time_samples, Dc, delta_Dc, wavelength, bandwidth, z, window_beta, N_bins):

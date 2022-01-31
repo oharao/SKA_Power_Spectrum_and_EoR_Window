@@ -16,24 +16,26 @@ import pandas as pd
 
 # take in freq in Hz
 def delay_transform(name1, name2, filepath, row, N, freq_values, s_21):
-    vis_data = np.zeros([40, N], dtype=complex)
+    vis_data = np.zeros([1480, N], dtype=complex)
+    vis_data_test = np.zeros([1480, N], dtype=complex)
 
     gain_data = pd.read_csv('./SKA_Power_Spectrum_and_EoR_Window/example_S21_parameter.txt', delimiter=' ',
                             names=['freq', 's_21'])
-    gain = gain_data['s_21'][300:340].values
+    gain = gain_data['s_21'][0:1480].values
 
-    for k in range(40):
+    for k in range(1480):
         freq = '%0.3f' % float((freq_values / 1e6)[k])
         filename = filepath + name1 + freq + name2
         tb.open(filename)
         vis = tb.getcol("DATA", row, N)  # structure: [pol,baseline]
         if s_21 == True:
+            vis_data_test[k, :] = vis[0, :]
             vis = vis[0, :] * gain[k] ** 2  # take XX pol for now
         else:
             vis = vis[0, :]
         vis_data[k, :] = vis
 
-    window_vector = np.hanning(40)  # np.kaiser(40,window_beta)
+    window_vector = np.hanning(1480)  # np.kaiser(40,window_beta)
     window_array = np.tile(window_vector, (N, 1)).T
     window_norm = np.sum(window_vector)
     vis_data2 = vis_data * window_array / window_norm
@@ -134,7 +136,7 @@ def get_Pd_avg_unfolded_binning(name1, name2, filepath, N_baselines, freq_values
         # sort by delay values
         sorted_vis_delay = sortedi_vis_delay[delay_values.argsort(), :]
 
-        sorted_vis_delay_bins = np.zeros([40, N_bins])
+        sorted_vis_delay_bins = np.zeros([1480, N_bins])
         for q in range(N_bins):
             if vis_position[q] != vis_position[q + 1]:
                 sorted_vis_delay_bins[:, q] = np.sum(sorted_vis_delay[:, vis_position[q]:vis_position[q + 1] - 1],
@@ -176,10 +178,8 @@ def plot_log(limits, gleam, signal, name):
     masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
 
     fig, ax = plt.subplots()
-    c = ax.pcolormesh(k_perp_plot, k_parallel_plot[21:], signal[21:, :],
+    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot[21:], signal[21:, :],
                       norm=LogNorm(vmin=masked_P_d_gleam.min(), vmax=signal.max()), cmap="jet")
-    ax.set_ylim(k_parallel_plot[21:].min(), k_parallel_plot.max())
-    ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
@@ -190,6 +190,8 @@ def plot_log(limits, gleam, signal, name):
     ax.plot(horizon_limit_x, beam_limit_y, color='black')
     ax.plot(horizon_limit_x, horizon_limit_y_neg, color='white')
     ax.plot(horizon_limit_x, beam_limit_y_neg, color='black')
+    ax.set_ylim(k_parallel_plot[21:].min(), k_parallel_plot.max())
+    ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
     plt.savefig(name)
 
 
@@ -199,7 +201,7 @@ def plot_lin(limits, gleam, signal, name):
     masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
 
     fig2, ax2 = plt.subplots()
-    c = ax2.pcolormesh(k_perp_plot, k_parallel_plot, signal,
+    c = ax2.pcolormesh(k_perp_plot[:-1], k_parallel_plot, signal,
                        norm=LogNorm(vmin=masked_P_d_gleam.min(), vmax=signal.max()), cmap="jet")
     ax2.set_ylim(k_parallel_plot.min(), k_parallel_plot.max())
     ax2.set_xlim(k_perp_plot.min(), 3.8)
@@ -215,17 +217,18 @@ def plot_lin(limits, gleam, signal, name):
 
 
 def main():
-    freq_values = np.arange(79.5e6, 80.5e6, 0.025e6)  # change this if channels change
+    freq_values = np.arange(72.0e6, 109.0e6, 0.025e6)  # change this if channels change
     freq_interval = 0.025e6  # change this if channels change
 
     wavelength_values = 3e8 / freq_values
     z_values = 1420.0e6 / freq_values - 1
     delay_values = get_delay_times(freq_values, freq_interval)
 
-    filepath1 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/test_eor2/"
+    # filepath1 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/test_eor2/"
+    filepath1 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/21cmBiBox_gleam_ms/"
     filepath2 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/MS_EDGES/"
-    gleam_name1 = "gleam_all_freq"
-    gleam_name2 = "MHz.ms"
+    gleam_name1 = "gleam_all_freq_"
+    gleam_name2 = "_MHz.ms"
     signal1 = "CMB_0.4_33.5_5_25000_Freq_"
     signal2 = ".ms"
     control1 = "CMB_0.4_33.5_5_1_Freq_"
@@ -240,7 +243,7 @@ def main():
     bandwidth_values = 0.025e6  # bandwidth in Hz
 
     # now try one channel only, can probably loop over other channels later
-    time_samples = 40  # number of time samples to mod average over
+    time_samples = 1  # 40  # number of time samples to mod average over
     N_baselines = 130816
     N_bins = 10000
     window_beta = 6
@@ -248,8 +251,8 @@ def main():
     gleam = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath1, N_baselines, freq_values,
                                         freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
                                         wavelength_values[20],
-                                        z_values[20], N_bins)
-
+                                        z_values[20], N_bins, s_21=True)
+    """
     gleam_with = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath1, N_baselines, freq_values,
                                         freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
                                         wavelength_values[20],
@@ -277,13 +280,16 @@ def main():
                                              z_values[20], N_bins, s_21=True)[0]
 
     Pd_relative = np.divide(Pd_signal, Pd_signalc, out=np.zeros_like(Pd_signal), where=Pd_signalc != 0)
-    Pd_relative_with = np.divide(Pd_signal_with, Pd_signalc_with, out=np.zeros_like(Pd_signal_with), where=Pd_signalc_with != 0)
+    Pd_relative_with = np.divide(Pd_signal_with, Pd_signalc_with, out=np.zeros_like(Pd_signal_with),
+                                 where=Pd_signalc_with != 0)
+    """
 
     limits = get_limits(gleam, Dc_values, z_values, wavelength_values)
-    limits_with = get_limits(gleam_with, Dc_values, z_values, wavelength_values)
+    # limits_with = get_limits(gleam_with, Dc_values, z_values, wavelength_values)
 
     plot_log(limits, gleam, gleam[0], "part2_1.png")
     plot_lin(limits, gleam, gleam[0], "part2_2.png")
+    """
     plot_log(limits, gleam, Pd_signal, "part2_3.png")
     plot_lin(limits, gleam, Pd_signal, "part2_4.png")
     plot_log(limits, gleam, Pd_relative, "part2_5.png")
@@ -316,6 +322,8 @@ def main():
     ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
     fig.colorbar(c, label='residual power')
     plt.savefig("log residual.png")
+    """
+
 
 if __name__ == '__main__':
     main()
