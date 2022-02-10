@@ -12,6 +12,8 @@ import csv
 from matplotlib.colors import LogNorm
 from bisect import bisect_left
 import pandas as pd
+# For testing in Pycharm
+# import casacore.tables as tb
 
 
 # take in freq in Hz
@@ -19,15 +21,21 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, s_21):
     vis_data = np.zeros([1480, N], dtype=complex)
     vis_data_test = np.zeros([1480, N], dtype=complex)
 
-    gain_data = pd.read_csv('./SKA_Power_Spectrum_and_EoR_Window/example_S21_parameter.txt', delimiter=' ',
+    gain_data = pd.read_csv('./SKA_Power_Spectrum_and_EoR_Window/s_21/omega=7000_S21_1st.txt', delimiter=' ',
                             names=['freq', 's_21'])
     gain = gain_data['s_21'][0:1480].values
 
     for k in range(1480):
         freq = '%0.3f' % float((freq_values / 1e6)[k])
         filename = filepath + name1 + freq + name2
+
+        # Comment for Pycharm testing
         tb.open(filename)
         vis = tb.getcol("DATA", row, N)  # structure: [pol,baseline]
+        # Uncomment for Pycharm testing
+        # table = tb.table(filename)
+        # vis = table.getcol("DATA", row, N)[:, 0, :].transpose() # structure: [pol,baseline]
+
         if s_21 == True:
             vis_data_test[k, :] = vis[0, :]
             vis = vis[0, :] * gain[k] ** 2  # take XX pol for now
@@ -47,8 +55,14 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, s_21):
 def get_baselines_mag(name1, name2, filepath, row, N, freq=80.0):
     freq = '%0.3f' % float(freq)
     filename = filepath + name1 + freq + name2
+
+    # Comment for Pycharm testing
     tb.open(filename)
     uvw_data = tb.getcol("UVW", row, N)  # struture: uvw, baseline
+    # Uncomment for Pycharm testing
+    # table = tb.table(filename)
+    # uvw_data = table.getcol("UVW", row, N).transpose()  # struture: uvw, baseline
+
     baseline_mag = np.linalg.norm(uvw_data, axis=0)
     return baseline_mag
 
@@ -179,7 +193,7 @@ def plot_log(limits, gleam, signal, name):
 
     fig, ax = plt.subplots()
     c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot[21:], signal[21:, :],
-                      norm=LogNorm(vmin=masked_P_d_gleam.min(), vmax=signal.max()), cmap="jet")
+                      norm=LogNorm(vmin=10 ** 0, vmax=10 ** 14), cmap="jet")
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
@@ -202,7 +216,7 @@ def plot_lin(limits, gleam, signal, name):
 
     fig2, ax2 = plt.subplots()
     c = ax2.pcolormesh(k_perp_plot[:-1], k_parallel_plot, signal,
-                       norm=LogNorm(vmin=masked_P_d_gleam.min(), vmax=signal.max()), cmap="jet")
+                       norm=LogNorm(vmin=10 ** 0, vmax=10 ** 14), cmap="jet")
     ax2.set_ylim(k_parallel_plot.min(), k_parallel_plot.max())
     ax2.set_xlim(k_perp_plot.min(), 3.8)
     ax2.set_xlabel('$k_\perp [h Mpc^{-1}]$')
@@ -251,14 +265,14 @@ def main():
     gleam = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath1, N_baselines, freq_values,
                                         freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
                                         wavelength_values[20],
-                                        z_values[20], N_bins, s_21=True)
-    """
+                                        z_values[20], N_bins, s_21=False)
+
     gleam_with = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath1, N_baselines, freq_values,
-                                        freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
-                                        wavelength_values[20],
-                                        z_values[20], N_bins, s_21=True)
+                                             freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
+                                             wavelength_values[20],
+                                             z_values[20], N_bins, s_21=True)
 
-
+    """
     Pd_signal = get_Pd_avg_unfolded_binning(signal1, signal2, filepath2, N_baselines, freq_values,
                                             freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
                                             wavelength_values[20],
@@ -285,44 +299,39 @@ def main():
     """
 
     limits = get_limits(gleam, Dc_values, z_values, wavelength_values)
-    # limits_with = get_limits(gleam_with, Dc_values, z_values, wavelength_values)
+    limits_with = get_limits(gleam_with, Dc_values, z_values, wavelength_values)
 
     plot_log(limits, gleam, gleam[0], "part2_1.png")
     plot_lin(limits, gleam, gleam[0], "part2_2.png")
+    plot_log(limits_with, gleam_with, gleam_with[0], "part2_3.1.png")
+    plot_lin(limits_with, gleam_with, gleam_with[0], "part2_4.1.png")
     """
     plot_log(limits, gleam, Pd_signal, "part2_3.png")
     plot_lin(limits, gleam, Pd_signal, "part2_4.png")
     plot_log(limits, gleam, Pd_relative, "part2_5.png")
     plot_lin(limits, gleam, Pd_relative, "part2_6.png")
-    plot_log(limits_with, gleam_with, gleam_with[0], "part2_1.1.png")
-    plot_lin(limits_with, gleam_with, gleam_with[0], "part2_2.1.png")
-    plot_log(limits_with, gleam_with, Pd_signal_with, "part2_3.1.png")
-    plot_lin(limits_with, gleam_with, Pd_signal_with, "part2_4.1.png")
+    
+    
     plot_log(limits_with, gleam_with, Pd_relative_with, "part2_5.1.png")
     plot_lin(limits_with, gleam_with, Pd_relative_with, "part2_6.1.png")
+    """
 
-
-    diff = np.subtract(gleam[0], gleam_with[0], out=np.zeros_like(gleam[0]))
+    diff = np.divide(np.abs(np.subtract(gleam[0], gleam_with[0], out=np.zeros_like(gleam[0]))), gleam[0],
+                     out=np.zeros_like(gleam[0]))
     P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
 
     fig, ax = plt.subplots()
-    c = ax.pcolor(diff)
-    ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
-    ax.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    fig.colorbar(c, label='residual power')
-    plt.savefig("residual.png")
-
-    fig, ax = plt.subplots()
-    c = ax.pcolor((diff))
-    ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
-    ax.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
+    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot, np.log(diff), cmap="jet")
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_ylim(k_parallel_plot[21:].min(), k_parallel_plot.max())
+    ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
+    ax.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
+    fig.colorbar(c, label='Log($P_d$ $[mK^2(Mpc/h)^3]$)')
+
+    ax.set_ylim(3*10**-3, k_parallel_plot.max())
     ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
-    fig.colorbar(c, label='residual power')
-    plt.savefig("log residual.png")
-    """
+
+    plt.savefig("residual.png")
 
 
 if __name__ == '__main__':
