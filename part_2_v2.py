@@ -12,6 +12,8 @@ import csv
 from matplotlib.colors import LogNorm
 from bisect import bisect_left
 import pandas as pd
+
+
 # For testing in Pycharm
 # import casacore.tables as tb
 
@@ -20,10 +22,6 @@ import pandas as pd
 def delay_transform(name1, name2, filepath, row, N, freq_values, s_21):
     vis_data = np.zeros([1480, N], dtype=complex)
     vis_data_test = np.zeros([1480, N], dtype=complex)
-
-    gain_data = pd.read_csv('./SKA_Power_Spectrum_and_EoR_Window/s_21/omega=7000_S21_1st.txt', delimiter=' ',
-                            names=['freq', 's_21'])
-    gain = gain_data['s_21'][0:1480].values
 
     for k in range(1480):
         freq = '%0.3f' % float((freq_values / 1e6)[k])
@@ -36,12 +34,7 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, s_21):
         # table = tb.table(filename)
         # vis = table.getcol("DATA", row, N)[:, 0, :].transpose() # structure: [pol,baseline]
 
-        if s_21 == True:
-            vis_data_test[k, :] = vis[0, :]
-            vis = vis[0, :] * gain[k] ** 2  # take XX pol for now
-        else:
-            vis = vis[0, :]
-        vis_data[k, :] = vis
+        vis_data[k, :] = vis[0, :]
 
     window_vector = np.hanning(1480)  # np.kaiser(40,window_beta)
     window_array = np.tile(window_vector, (N, 1)).T
@@ -238,15 +231,9 @@ def main():
     z_values = 1420.0e6 / freq_values - 1
     delay_values = get_delay_times(freq_values, freq_interval)
 
-    # filepath1 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/test_eor2/"
-    filepath1 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/21cmBiBox_gleam_ms/"
-    filepath2 = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/MS_EDGES/"
+    filepath = "./SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/antenna_gains_ref3_atten_length_temp/"
     gleam_name1 = "gleam_all_freq_"
     gleam_name2 = "_MHz.ms"
-    signal1 = "CMB_0.4_33.5_5_25000_Freq_"
-    signal2 = ".ms"
-    control1 = "CMB_0.4_33.5_5_1_Freq_"
-    control2 = ".ms"
 
     Dc_file = './SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/21cmBiBox/los_comoving_distance.csv'
     Dc_values = get_Dc_values(Dc_file)
@@ -254,74 +241,40 @@ def main():
     delta_Dc_file = './SKA_Power_Spectrum_and_EoR_Window/SKA_sim_data/21cmBiBox/delta_los_comoving_distance.csv'
     delta_Dc_values = get_delta_Dc_values(delta_Dc_file)
 
-    bandwidth_values = 0.025e6  # bandwidth in Hz
-
     # now try one channel only, can probably loop over other channels later
     time_samples = 1  # 40  # number of time samples to mod average over
     N_baselines = 130816
     N_bins = 10000
-    window_beta = 6
 
-    gleam = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath1, N_baselines, freq_values,
+    gleam_control = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2,
+                                                control,
+                                                N_baselines, freq_values,
+                                                freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
+                                                wavelength_values[20],
+                                                z_values[20], N_bins, s_21=False)
+
+    gleam = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath, N_baselines, freq_values,
                                         freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
                                         wavelength_values[20],
-                                        z_values[20], N_bins, s_21=False)
+                                        z_values[20], N_bins, s_21=True)
 
-    gleam_with = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath1, N_baselines, freq_values,
-                                             freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
-                                             wavelength_values[20],
-                                             z_values[20], N_bins, s_21=True)
-
-    """
-    Pd_signal = get_Pd_avg_unfolded_binning(signal1, signal2, filepath2, N_baselines, freq_values,
-                                            freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
-                                            wavelength_values[20],
-                                            z_values[20], N_bins)[0]
-
-    Pd_signal_with = get_Pd_avg_unfolded_binning(signal1, signal2, filepath2, N_baselines, freq_values,
-                                            freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
-                                            wavelength_values[20],
-                                            z_values[20], N_bins, s_21=True)[0]
-
-    Pd_signalc = get_Pd_avg_unfolded_binning(control1, control2, filepath2, N_baselines, freq_values,
-                                             freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
-                                             wavelength_values[20],
-                                             z_values[20], N_bins)[0]
-
-    Pd_signalc_with = get_Pd_avg_unfolded_binning(control1, control2, filepath2, N_baselines, freq_values,
-                                             freq_interval, time_samples, Dc_values[20], delta_Dc_values[20],
-                                             wavelength_values[20],
-                                             z_values[20], N_bins, s_21=True)[0]
-
-    Pd_relative = np.divide(Pd_signal, Pd_signalc, out=np.zeros_like(Pd_signal), where=Pd_signalc != 0)
-    Pd_relative_with = np.divide(Pd_signal_with, Pd_signalc_with, out=np.zeros_like(Pd_signal_with),
-                                 where=Pd_signalc_with != 0)
-    """
 
     limits = get_limits(gleam, Dc_values, z_values, wavelength_values)
-    limits_with = get_limits(gleam_with, Dc_values, z_values, wavelength_values)
+    control_limits = get_limits(gleam_control, Dc_values, z_values, wavelength_values)
 
-    plot_log(limits, gleam, gleam[0], "part2_1.png")
-    plot_lin(limits, gleam, gleam[0], "part2_2.png")
-    plot_log(limits_with, gleam_with, gleam_with[0], "part2_3.1.png")
-    plot_lin(limits_with, gleam_with, gleam_with[0], "part2_4.1.png")
-    """
-    plot_log(limits, gleam, Pd_signal, "part2_3.png")
-    plot_lin(limits, gleam, Pd_signal, "part2_4.png")
-    plot_log(limits, gleam, Pd_relative, "part2_5.png")
-    plot_lin(limits, gleam, Pd_relative, "part2_6.png")
-    
-    
-    plot_log(limits_with, gleam_with, Pd_relative_with, "part2_5.1.png")
-    plot_lin(limits_with, gleam_with, Pd_relative_with, "part2_6.1.png")
-    """
+    plot_log(limits, gleam, gleam[0], "part2_log.png")
+    plot_lin(limits, gleam, gleam[0], "part2_lin.png")
+    plot_log(control_limits, gleam_control, gleam_control[0], "control_log.png")
+    plot_lin(control_limits, gleam_control, gleam_control[0], "control_lin.png")
 
-    diff = np.divide(np.abs(np.subtract(gleam[0], gleam_with[0], out=np.zeros_like(gleam[0]))), gleam[0],
-                     out=np.zeros_like(gleam[0]))
+    #diff = np.divide(np.abs(np.subtract(gleam[0], gleam_control[0], out=np.zeros_like(gleam[0]))), gleam[0],
+    #                 out=np.zeros_like(gleam[0]))
+    diff = np.abs(np.subtract(gleam[0], gleam_control[0], out=np.zeros_like(gleam[0])))
+
     P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
 
     fig, ax = plt.subplots()
-    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot, np.log(diff), cmap="jet")
+    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot, np.log(diff), vmax=5, vmin=-5, cmap="jet")
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
@@ -332,7 +285,6 @@ def main():
     ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
 
     plt.savefig("residual.png")
-
 
 if __name__ == '__main__':
     main()

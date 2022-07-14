@@ -1,2 +1,6 @@
 SKA_sim_data/
 antenna_gains/
+Results/
+/End-2-End/GLEAM_EGC.fits
+/oskar_pipeline.tar
+/comoving/
