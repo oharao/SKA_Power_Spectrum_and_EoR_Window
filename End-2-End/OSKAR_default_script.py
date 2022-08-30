@@ -1,7 +1,6 @@
 from astropy.io import fits
 from astropy.time import Time, TimeDelta
 import numpy
-import oskar
 import os
 
 
@@ -16,6 +15,7 @@ def get_start_time(ra0_deg, length_sec):
 
 def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth):
     """Main function."""
+    import oskar
     # Telescope and observation parameters.
     ra0_deg = 60.0
     dec0_deg = -30.0
@@ -25,7 +25,7 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
     num_channels = channels
 
     # Load sky model from GLEAM FITS binary table.
-    data = fits.getdata("/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/End-2-End/GLEAM_EGC.fits", 1)
+    data = fits.getdata("SKA_Power_Spectrum_and_EoR_Window/End-2-End/GLEAM_EGC.fits", 1)
     flux = data["int_flux_076"]
     alpha = data["alpha"]
     flux = numpy.nan_to_num(flux)
@@ -39,7 +39,7 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
     # Create the sky model.
     sky = oskar.Sky.from_array(sky_array)
 
-    os.mkdir('./' + telescope_model + '_vis/')
+    os.mkdir(telescope_model + '_vis/')
     # Loop over frequency channels.
     for c in range(num_channels):
         # Get the FITS filename.
@@ -66,7 +66,7 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
             "telescope/aperture_array/element_pattern/normalise": True,
             "telescope/aperture_array/element_pattern/swap_xy": True,
             "interferometer/max_time_samples_per_block": 1,
-            "interferometer/channel_bandwidth_hz": 25e3,
+            "interferometer/channel_bandwidth_hz": frequency_inc_hz,
             "interferometer/time_average_sec": 0.9,
         }
         settings_sim = oskar.SettingsTree("oskar_sim_interferometer")

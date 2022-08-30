@@ -8,14 +8,14 @@ import pandas as pd
 from datetime import datetime
 
 from Coaxial_Transmission import compute_interferometer_s21
-from OSKAR_default_script import run_oskar_gleam_model
 from generate_EoR import plot_eor
 from logger import init_logger
+from OSKAR_default_script import run_oskar_gleam_model
 
 
 def to_hdf5(gains, frequencies, folder):
     # Write HDF5 file with recognised dataset names.
-    with h5py.File("./" + folder + "/gain_model" + ".h5", "w") as hdf_file:
+    with h5py.File(folder + "/gain_model" + ".h5", "w") as hdf_file:
         hdf_file.create_dataset("freq (Hz)", data=frequencies)
         hdf_file.create_dataset("gain_xpol", data=gains)
 
@@ -33,8 +33,8 @@ def main():
     atten_tangent = False
     atten_thermal = False
     base_temperature = 298.15
-    cable_reflections = False
-    reflection_order = 0
+    cable_reflections = True
+    reflection_order = 1
 
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -54,7 +54,8 @@ def main():
     # Copy ./antenna_pos in order to generate a new telescope model to which gain_models may be applied.
     try:
         logger.info(f'Creating new telescope model from the antenna positions.')
-        shutil.copytree('/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/', date + '_telescope_model/')  # Create temp dir copy of antenna pos + gains
+        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/',
+                        date + '_telescope_model/')  # Create temp dir copy of antenna pos + gains
         logger.info(f'Success, the telescope model was created: {date}_telescope_model.\n')
     except Exception:
         logger.exception('The following exception was raised: \n ')
@@ -66,6 +67,7 @@ def main():
         antenna_info = compute_interferometer_s21(max_freq=max_freq,
                                                   min_freq=min_freq,
                                                   channels=channels,
+                                                  channel_bandwidth=channel_bandwidth,
                                                   intended_length=intended_length,
                                                   length_variation=length_variation,
                                                   atten_skin_effect=atten_skin_effect,
@@ -117,9 +119,9 @@ def main():
         logger.info(f'Plotting the EoR windows for visibilities {date}_vis')
         control = 'control.ms'
 
-        os.mkdir('./' + date + '_results')
+        os.mkdir(date + '_results')
 
-        plot_eor(control, date + '_vis', '/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/' + date + '_results',
+        plot_eor(control, date + '_vis', date + '_results',
                  min_freq, max_freq, channels, channel_bandwidth)
         logger.info('Success. \n')
     except Exception:

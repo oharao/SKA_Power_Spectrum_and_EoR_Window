@@ -13,16 +13,15 @@ import numpy as np
 from matplotlib.colors import LogNorm
 from scipy.fft import fft, fftfreq
 
-import casacore.tables as tb
-
 
 # take in freq in Hz
 def delay_transform(name1, name2, filepath, row, N, freq_values, channels):
+    import casacore.tables as tb
     vis_data = np.zeros([channels, N], dtype=complex)
 
     for k in range(channels):
         freq = '%0.3f' % float((freq_values / 1e6)[k])
-        filename = '/home/osdo2/' + filepath + "/" + name1 + freq + name2
+        filename = filepath + "/" + name1 + freq + name2
 
         table = tb.table(filename)
         vis = table.getcol("DATA", row, N)[:, 0, :].transpose() # structure: [pol,baseline]
@@ -38,8 +37,9 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, channels):
 
 # used to be the same function as delay_transform but separated to speed it up
 def get_baselines_mag(name1, name2, filepath, row, N, freq_values, channels):
+    import casacore.tables as tb
     freq = '%0.3f' % float((freq_values / 1e6)[0])
-    filename = '/home/osdo2/' + filepath + "/" + name1 + freq + name2
+    filename = filepath + "/" + name1 + freq + name2
 
     table = tb.table(filename)
     uvw_data = table.getcol("UVW", row, N).transpose()  # struture: uvw, baselinene
@@ -219,10 +219,10 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     gleam_name1 = "gleam_all_freq_"
     gleam_name2 = "_MHz.ms"
 
-    Dc_file = '/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/comoving/los_comoving_distance.csv'
+    Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/los_comoving_distance.csv'
     Dc_values = get_Dc_values(Dc_file)
 
-    delta_Dc_file = '/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/comoving/delta_los_comoving_distance.csv'
+    delta_Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/delta_los_comoving_distance.csv'
     delta_Dc_values = get_delta_Dc_values(delta_Dc_file)
 
     # now try one channel only, can probably loop over other channels later
@@ -264,3 +264,6 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
 
     plt.savefig(output_dir + "/residual.png")
+
+
+print('hi')

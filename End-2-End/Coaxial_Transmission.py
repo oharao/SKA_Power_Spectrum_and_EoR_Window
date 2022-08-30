@@ -431,7 +431,7 @@ def polar_to_cart(rho, phi):  # meters, degrees
 
 def get_antenna_pos():
     centre = [116.7644482, -26.82472208]  # lat , lon
-    station_pos = pd.read_csv('/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/layout_wgs84.txt',
+    station_pos = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/layout_wgs84.txt',
                               header=None, names=["latitude", "longitude"])
     station_pos['lat_rel'] = (station_pos['latitude'] - centre[0])
     station_pos['lon_rel'] = (station_pos['longitude'] - centre[1])
@@ -441,7 +441,7 @@ def get_antenna_pos():
 
     antenna_info = pd.DataFrame(columns=['station', 'x', 'y'])
     for i, x, y in zip(range(512), station_pos['x'], station_pos['y']):
-        df = pd.read_csv('/home/osdo2/SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/station' +
+        df = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/station' +
                          str(i).rjust(3, '0') + '/layout.txt', header=None,
                          names=["delta_x", "delta_y"])
         df['delta_x'], df['delta_y'] = df['delta_x'] + x, df['delta_y'] + y
