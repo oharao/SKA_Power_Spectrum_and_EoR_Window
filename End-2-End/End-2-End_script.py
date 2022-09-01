@@ -33,8 +33,8 @@ def main():
     atten_tangent = False
     atten_thermal = False
     base_temperature = 298.15
-    cable_reflections = True
-    reflection_order = 1
+    cable_reflections = False
+    reflection_order = 0
 
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S')

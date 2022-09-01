@@ -12,20 +12,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
 from scipy.fft import fft, fftfreq
+import oskar
+import os
 
 
 # take in freq in Hz
 def delay_transform(name1, name2, filepath, row, N, freq_values, channels):
-    import casacore.tables as tb
     vis_data = np.zeros([channels, N], dtype=complex)
 
     for k in range(channels):
         freq = '%0.3f' % float((freq_values / 1e6)[k])
-        filename = filepath + "/" + name1 + freq + name2
 
-        table = tb.table(filename)
-        vis = table.getcol("DATA", row, N)[:, 0, :].transpose() # structure: [pol,baseline]
-        vis_data[k, :] = vis[0, :]
+        (header, handle) = oskar.VisHeader.read(filepath + "/" + name1 + freq + name2)
+        block = oskar.VisBlock.create_from_header(header)
+        for i in range(header.num_blocks):
+            block.read(header, handle, i)
+            vis = block.cross_correlations()
+            vis_data[k, :] = (vis[row, 0])[:, 0]
 
     window_vector = np.hanning(channels)  # np.kaiser(40,window_beta)
     window_array = np.tile(window_vector, (N, 1)).T
@@ -36,15 +39,22 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, channels):
 
 
 # used to be the same function as delay_transform but separated to speed it up
-def get_baselines_mag(name1, name2, filepath, row, N, freq_values, channels):
-    import casacore.tables as tb
+def get_baselines_mag(name1, name2, filepath, freq_values):
     freq = '%0.3f' % float((freq_values / 1e6)[0])
-    filename = filepath + "/" + name1 + freq + name2
 
-    table = tb.table(filename)
-    uvw_data = table.getcol("UVW", row, N).transpose()  # struture: uvw, baselinene
-
+    print(os.getcwd())
+    print(os.path.exists(filepath + "/" + name1 + freq + name2))
+    print(filepath + "/" + name1 + freq + name2)
+    (header, handle) = oskar.VisHeader.read(filepath + "/" + name1 + freq + name2)
+    block = oskar.VisBlock.create_from_header(header)
+    for i in range(header.num_blocks):
+        block.read(header, handle, i)
+        u = block.baseline_uu_metres()
+        v = block.baseline_vv_metres()
+        w = block.baseline_ww_metres()
+    uvw_data = np.array((u, v, w))  # struture: uvw, baselinene
     return np.linalg.norm(uvw_data, axis=0)
+
 
 # abs tau
 def get_delay_times(freq, freq_interval):
@@ -111,7 +121,7 @@ def get_delta_Dc_values(delta_Dc_file):
 def get_Pd_avg_unfolded_binning(name1, name2, filepath, N_baselines, freq_values, freq_interval, channels,
                                 time_samples, Dc, delta_Dc, wavelength, z, N_bins):
     # every 130816th baselines are of the same magnitude because it is the same pair rotated around Earth
-    baseline_mag = get_baselines_mag(name1, name2, filepath, 0, N_baselines, freq_values, channels)
+    baseline_mag = get_baselines_mag(name1, name2, filepath, freq_values)[0]
     sorted_baseline_mag = np.sort(baseline_mag)
     delay_values = get_delay_times(freq_values, freq_interval)
     sorted_delay_values = np.sort(delay_values)
@@ -217,7 +227,7 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     delay_values = get_delay_times(freq_values, freq_interval)
 
     gleam_name1 = "gleam_all_freq_"
-    gleam_name2 = "_MHz.ms"
+    gleam_name2 = "_MHz.vis"
 
     Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/los_comoving_distance.csv'
     Dc_values = get_Dc_values(Dc_file)
@@ -264,6 +274,3 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
 
     plt.savefig(output_dir + "/residual.png")
-
-
-print('hi')

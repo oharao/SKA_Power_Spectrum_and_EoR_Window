@@ -73,7 +73,7 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
         settings_sim.from_dict(params)
 
         # Run simulation.
-        settings_sim["interferometer/ms_filename"] = telescope_model + '_vis/' + root_name + ".ms"
+        settings_sim["interferometer/oskar_vis_filename"] = telescope_model + '_vis/' + root_name + ".vis"
         sim = oskar.Interferometer(settings=settings_sim)
         sim.set_sky_model(sky)
         sim.run()
