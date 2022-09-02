@@ -191,7 +191,7 @@ class cable_decay:
             Loss due to dielectric conductivity [dB/m].
         """
         loss_mhos_per_m = 2 * np.pi / self.rho_dielectric / np.log(self.b / self.a)
-        self.loss_sigma = 8.686 * loss_mhos_per_m * self.z_0 / 2
+        self.loss_sigma = (8.686 * loss_mhos_per_m * self.z_0 / 2) * np.ones(np.shape(self.frequencies))
         return self.loss_sigma
 
     def loss_dielectric_tangent(self):
@@ -234,14 +234,12 @@ class cable_decay:
         self.reflection_coeff = (self.z_l - self.z_0) / (self.z_l + self.z_0)
         return self.reflection_coeff
 
-    def atennuate_signal(self, signal, length, temperature, incl_delta=True, incl_sigma=True, incl_tangent=True,
-                         incl_thermal=True):
+    def atennuate(self, length, temperature, incl_delta=True, incl_sigma=True, incl_tangent=True,
+                  incl_thermal=True):
         """
         Apply selected (Skin depth effect, conductivity, tangent & thermal) attenuation to an input signal.
         Parameters
         ----------
-        signal : float
-            Input signal [dimensionless].
         length : float
             Cable length [meters].
         temperature : float
@@ -262,21 +260,19 @@ class cable_decay:
         """
         attenuation = 0
 
-        if incl_delta == True and incl_thermal == False:
+        if incl_delta is True and incl_thermal is False:
             attenuation += self.loss_delta
-        if incl_sigma == True:
+        if incl_sigma is True:
             attenuation += self.loss_sigma
-        if incl_tangent == True:
+        if incl_tangent is True:
             attenuation += self.loss_tangent
-        if incl_thermal == True:
+        if incl_thermal is True:
             attenuation += self.loss_thermal(temperature)
 
-        if incl_delta == False and incl_sigma == False and incl_tangent == False and incl_thermal == False:
-            return signal * np.ones(np.shape(self.frequencies))
-        elif incl_delta == False and incl_sigma == True and incl_tangent == False and incl_thermal == False:
-            return signal * (10 ** (-(attenuation * np.ones(np.shape(self.frequencies)) / 10) * length))
+        if incl_delta is False and incl_sigma is False and incl_tangent is False and incl_thermal is False:
+            return np.ones(np.shape(self.frequencies))
         else:
-            return signal * (10 ** (-(attenuation / 10) * length))
+            return 10 ** (-(attenuation / 10) * length)
 
     def cable_reflections(self, length, temperature, reflection_no, incl_delta=True, incl_sigma=True, incl_tangent=True,
                           incl_thermal=True):
@@ -306,15 +302,20 @@ class cable_decay:
         """
 
         v_g = const.c / np.sqrt(self.eps_dielectric * self.mu_dielectric)  # m/s
-        optical_length = (-1 + 2 * reflection_no) * length
-        delay = float(optical_length / v_g)  # seconds
-        omega = 2 * np.pi * delay
-        signal_amp = self.atennuate_signal(
-            np.sin(self.frequencies * omega) * (self.reflection_coeff ** (2 * reflection_no)),
-            optical_length, temperature, incl_delta=incl_delta, incl_sigma=incl_sigma,
-            incl_tangent=incl_tangent, incl_thermal=incl_thermal)
-        signal_phase = (2 * np.pi * self.frequencies) * delay
-        return [complex(signal_amp[i], signal_phase[i]) for i in range(len(signal_amp))]
+
+        optical_length = np.abs(1 + 2 * reflection_no) * length
+
+        delay = float(optical_length / v_g)
+
+        omega = 2 * np.pi * self.frequencies
+
+        A = (self.reflection_coeff ** (2 * reflection_no)) * self.atennuate(length, temperature,
+                                                                            incl_delta=incl_delta,
+                                                                            incl_sigma=incl_sigma,
+                                                                            incl_tangent=incl_tangent,
+                                                                            incl_thermal=incl_thermal)
+        return np.array([A[i] * complex(np.cos(omega[i] * delay),
+                                        np.sin(omega[i] * delay)) for i in range(len(self.frequencies))])
 
     def to_real_imag(self, amp_phase):
         """
@@ -377,27 +378,21 @@ class cable_decay:
         s_21: np.array(complex)
             Generated s21 for the given input parameters.
         """
-        signal = self.atennuate_signal(1, length, temperature, incl_delta=incl_delta, incl_sigma=incl_sigma,
-                                       incl_tangent=incl_tangent, incl_thermal=incl_thermal)
+        signal = complex(1, 0) * self.atennuate(length, temperature, incl_delta=incl_delta, incl_sigma=incl_sigma,
+                                                incl_tangent=incl_tangent, incl_thermal=incl_thermal)
         self.cable_reflection_coefficient()
 
-        if incl_reflections == True:
-            transmittance_amp = signal - signal * self.reflection_coeff
-        else:
-            transmittance_amp = signal
-
-        transmittance = [self.to_real_imag(complex(transmittance_amp[i], 0)) for i in range(len(transmittance_amp))]
-        if incl_reflections is True and reflection_no != 0:
-            for order in range(reflection_no):
-                reflection = self.cable_reflections(length, temperature, order + 1, incl_delta=incl_delta,
-                                                    incl_sigma=incl_sigma,
-                                                    incl_tangent=incl_tangent, incl_thermal=incl_thermal)
-                transmittance = [self.to_real_imag(reflection[i]) + transmittance[i] for i in range(len(reflection))]
-
-        s_21 = np.sqrt(np.abs(transmittance))
-        phase = np.imag(self.cable_reflections(length, temperature, 1, incl_delta=incl_delta, incl_sigma=incl_sigma,
-                                               incl_tangent=incl_tangent, incl_thermal=incl_thermal))
-        return [complex(s_21[i], phase[i]) for i in range(len(s_21))]
+        if incl_reflections is True:
+            signal -= signal * self.reflection_coeff
+            if reflection_no != 0:
+                for i in range(reflection_no):
+                    reflected_signal = self.cable_reflections(length=length, temperature=temperature,
+                                                              reflection_no=i + 1, incl_delta=incl_delta,
+                                                              incl_sigma=incl_sigma, incl_tangent=incl_tangent,
+                                                              incl_thermal=incl_thermal)
+                    signal += reflected_signal
+                return signal
+        return signal * np.ones(np.shape(self.frequencies))
 
 
 def equirectangular_approx(lat1, lon1, lat2, lon2):
@@ -431,7 +426,7 @@ def polar_to_cart(rho, phi):  # meters, degrees
 
 def get_antenna_pos():
     centre = [116.7644482, -26.82472208]  # lat , lon
-    station_pos = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/layout_wgs84.txt',
+    station_pos = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos/layout_wgs84.txt',
                               header=None, names=["latitude", "longitude"])
     station_pos['lat_rel'] = (station_pos['latitude'] - centre[0])
     station_pos['lon_rel'] = (station_pos['longitude'] - centre[1])
@@ -441,7 +436,7 @@ def get_antenna_pos():
 
     antenna_info = pd.DataFrame(columns=['station', 'x', 'y'])
     for i, x, y in zip(range(512), station_pos['x'], station_pos['y']):
-        df = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/station' +
+        df = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos/station' +
                          str(i).rjust(3, '0') + '/layout.txt', header=None,
                          names=["delta_x", "delta_y"])
         df['delta_x'], df['delta_y'] = df['delta_x'] + x, df['delta_y'] + y
@@ -466,12 +461,9 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
     return world
 
 
-def compute_interferometer_s21(max_freq=0.108975, min_freq=0.072, channels=1480, channel_bandwidth=0.0001098,
-                               intended_length=10, length_variation=0.00, atten_skin_effect=False,
-                               atten_conductivity=False,
-                               atten_tangent=False, atten_thermal=False, base_temperature=298.15,
-                               cable_reflections=False,
-                               reflection_order=0):
+def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
+                               atten_skin_effect, atten_conductivity, atten_tangent, atten_thermal, base_temperature,
+                               cable_reflections, reflection_order):
     antenna_info = get_antenna_pos()
 
     world = perlin_noise_map()
@@ -499,13 +491,10 @@ def compute_interferometer_s21(max_freq=0.108975, min_freq=0.072, channels=1480,
     antenna_info['delta_t'] = [base_temperature + world[round((x / 40000) * shape[0] / 2 + shape[0] / 2)][
         round((y / 40000) * shape[1] / 2 + shape[1] / 2)] for x, y in zip(antenna_info['x'], antenna_info['y'])]
 
-    antenna_info['s_21_amp_phase'] = [ska.loss_with_length_freq(l, dt, reflection_order, incl_delta=atten_skin_effect,
-                                                                incl_sigma=atten_conductivity,
-                                                                incl_tangent=atten_tangent,
-                                                                incl_thermal=atten_thermal,
-                                                                incl_reflections=cable_reflections) for l, dt in
-                                      zip(antenna_info['cable_length'], antenna_info['delta_t'])]
-
-    antenna_info['s_21_real_imag'] = [[ska.to_real_imag(data[i]) for i in range(len(data))] for data in
-                                      antenna_info['s_21_amp_phase']]
+    antenna_info['phasor'] = [ska.loss_with_length_freq(l, dt, reflection_order, incl_delta=atten_skin_effect,
+                                                        incl_sigma=atten_conductivity,
+                                                        incl_tangent=atten_tangent,
+                                                        incl_thermal=atten_thermal,
+                                                        incl_reflections=cable_reflections) for l, dt in
+                              zip(antenna_info['cable_length'], antenna_info['delta_t'])]
     return antenna_info

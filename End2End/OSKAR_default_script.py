@@ -13,19 +13,19 @@ def get_start_time(ra0_deg, length_sec):
     return start.value
 
 
-def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth):
+def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
     """Main function."""
     import oskar
     # Telescope and observation parameters.
     ra0_deg = 60.0
     dec0_deg = -30.0
     length_sec = 0.0
-    start_frequency_hz = min_freq * 10 ** 9
-    frequency_inc_hz = channel_bandwidth * 10 ** 9
+    start_frequency_hz = min_freq * 1e9
+    frequency_inc_hz = channel_bandwidth * 1e9
     num_channels = channels
 
     # Load sky model from GLEAM FITS binary table.
-    data = fits.getdata("SKA_Power_Spectrum_and_EoR_Window/End-2-End/GLEAM_EGC.fits", 1)
+    data = fits.getdata("SKA_Power_Spectrum_and_EoR_Window/End2End/GLEAM_EGC.fits", 1)
     flux = data["int_flux_076"]
     alpha = data["alpha"]
     flux = numpy.nan_to_num(flux)
@@ -39,7 +39,9 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
     # Create the sky model.
     sky = oskar.Sky.from_array(sky_array)
 
-    os.mkdir(telescope_model + '_vis/')
+    # Create directory to write OSKAR visibilities.
+    os.mkdir(date + '_vis/')
+
     # Loop over frequency channels.
     for c in range(num_channels):
         # Get the FITS filename.
@@ -60,7 +62,7 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
             "observation/num_time_steps": 1,
             "observation/start_time_utc": get_start_time(ra0_deg, length_sec),
             "observation/length": length_sec,
-            "telescope/input_directory": telescope_model+'_telescope_model',
+            "telescope/input_directory": date+'_telescope_model',
             "telescope/normalise_beams_at_phase_centre": False,
             "telescope/aperture_array/array_pattern/normalise": True,
             "telescope/aperture_array/element_pattern/normalise": True,
@@ -73,7 +75,7 @@ def run_oskar_gleam_model(telescope_model, min_freq, channels, channel_bandwidth
         settings_sim.from_dict(params)
 
         # Run simulation.
-        settings_sim["interferometer/oskar_vis_filename"] = telescope_model + '_vis/' + root_name + ".vis"
+        settings_sim["interferometer/oskar_vis_filename"] = date + '_vis/' + root_name + ".vis"
         sim = oskar.Interferometer(settings=settings_sim)
         sim.set_sky_model(sky)
         sim.run()

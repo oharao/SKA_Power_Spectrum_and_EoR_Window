@@ -7,42 +7,41 @@ import pandas as pd
 
 from datetime import datetime
 
-from Coaxial_Transmission import compute_interferometer_s21
-from generate_EoR import plot_eor
-from logger import init_logger
-from OSKAR_default_script import run_oskar_gleam_model
+from SKA_Power_Spectrum_and_EoR_Window.End2End.Coaxial_Transmission import compute_interferometer_s21
+from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import plot_eor
+from SKA_Power_Spectrum_and_EoR_Window.End2End.logger import init_logger
+from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_oskar_gleam_model
 
 
 def to_hdf5(gains, frequencies, folder):
     # Write HDF5 file with recognised dataset names.
-    with h5py.File(folder + "/gain_model" + ".h5", "w") as hdf_file:
-        hdf_file.create_dataset("freq (Hz)", data=frequencies)
+    with h5py.File(folder + "/gain_model.h5", "w") as hdf_file:
+        hdf_file.create_dataset("freq (Hz)", data=frequencies * 1e9)
         hdf_file.create_dataset("gain_xpol", data=gains)
 
 
-def main():
-    # Simulation initial conditions.
-    max_freq = 0.1001    # GHz (0.1000852)
-    min_freq = 0.070        # GHz
-    channel_bandwidth = 0.0001098
-    channels = 275
-    intended_length = 10
-    length_variation = 0.00
-    atten_skin_effect = False
-    atten_conductivity = False
-    atten_tangent = False
-    atten_thermal = False
-    base_temperature = 298.15
-    cable_reflections = False
-    reflection_order = 0
-
+def OSKAR_pipeline_run(max_freq=0.1001,
+                       min_freq=0.070,
+                       channel_bandwidth=0.0001098,
+                       channels=275,
+                       intended_length=40,
+                       length_variation=0.00,
+                       atten_skin_effect=False,
+                       atten_conductivity=False,
+                       atten_tangent=False,
+                       atten_thermal=False,
+                       base_temperature=298.15,
+                       cable_reflections=True,
+                       reflection_order=2
+                       ):
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # Initialise the logger and insert relevant information including keyword arguments.
     logger = init_logger(date)
     logger.info(f'Client initialised with parameters: \n Max Frequency: {max_freq} \n Min Frequency: {min_freq} \n '
-                f'Channels: {channels} \n Cable Length: {intended_length} \n Length Tolerance: {length_variation} \n '
+                f'Channel Bandwidth: {channel_bandwidth} \n Channels: {channels} \n Cable Length: {intended_length}'
+                f' \n Length Tolerance: {length_variation} \n '
                 f'Attenuation Due To The Skin Effect: {atten_skin_effect} \n '
                 f'Attenuation Due To The Dielectric Conductivity: {atten_conductivity} \n '
                 f'Attenuation Due To The Dielectric Tangent: {atten_tangent} \n '
@@ -54,9 +53,12 @@ def main():
     # Copy ./antenna_pos in order to generate a new telescope model to which gain_models may be applied.
     try:
         logger.info(f'Creating new telescope model from the antenna positions.')
-        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End-2-End/antenna_pos/',
-                        date + '_telescope_model/')  # Create temp dir copy of antenna pos + gains
-        logger.info(f'Success, the telescope model was created: {date}_telescope_model.\n')
+
+        # Create temp dir copy of antenna pos + gains
+        telescope_dir = date + '_telescope_model/'
+        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos/', telescope_dir)
+
+        logger.info(f'Success, the telescope model was created: {telescope_dir}.\n')
     except Exception:
         logger.exception('The following exception was raised: \n ')
         raise
@@ -86,7 +88,7 @@ def main():
     try:
         logger.info(f'Saving the S21 parameters for each 512 stations to the telescope model as gain_model.h5 files.')
         for n in range(512):
-            rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['s_21_real_imag'].values
+            rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['phasor'].values
             data = []
             [data.append(np.array(rows[i])) for i in range(len(rows))]
             to_hdf5(list(np.array([np.transpose(data)])), np.arange(min_freq, max_freq, channel_bandwidth),
@@ -99,7 +101,10 @@ def main():
     # Run OSKAR using the given telescope model.
     try:
         logger.info('Running OSKAR interferometer simulations with the given telescope model.')
+
+        # Run OSKAR for the generated telescope model.
         run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth)
+
         logger.info(f'Success, OSKAR visibilities have been generated to {date}_vis. \n')
     except Exception:
         logger.exception('The following exception was raised: \n')
@@ -107,8 +112,11 @@ def main():
 
     # Delete telescope model (approx 5 GB) to free storage space occupied by redundant data.
     try:
-        logger.info(f'Deleting used telescope model: {date}_telescope_model/')
-        shutil.rmtree(date + '_telescope_model/')
+        logger.info(f'Deleting used telescope model: {telescope_dir}.')
+
+        # Removing telescope model to conserve storage space.
+        shutil.rmtree(telescope_dir)
+
         logger.info('Success. \n')
     except Exception:
         logger.exception('The following exception was raised: \n')
@@ -117,12 +125,17 @@ def main():
     # Plotting the EoR window plots using the control.ms and the newly generated visibilities.
     try:
         logger.info(f'Plotting the EoR windows for visibilities {date}_vis')
-        control = 'control.ms'
 
-        os.mkdir(date + '_results')
+        # Specify control visibility data. Generated using simulation pipeline: all antenna gains = 1+0j.
+        control = 'control.vis'
 
-        plot_eor(control, date + '_vis', date + '_results',
-                 min_freq, max_freq, channels, channel_bandwidth)
+        # Create directory to write SKA window plots to.
+        result_dir = date + '_results'
+        os.mkdir(result_dir)
+
+        # Plotting data generated by OSKAR in order to create the EoR windows.
+        plot_eor(control, date + '_vis', result_dir, min_freq, max_freq, channels, channel_bandwidth)
+
         logger.info('Success. \n')
     except Exception:
         logger.exception('The following exception was raised: \n')
@@ -131,7 +144,10 @@ def main():
     # Delete the OSKAR visibilities (approx 40 GB) to free storage space occupied by redundant data.
     try:
         logger.info(f'Deleting used visibilities {date}_vis')
+
+        # Removing visibilities to conserve storage space.
         shutil.rmtree(date + '_vis')
+
         logger.info('Success. \n')
     except Exception:
         logger.exception('The following exception was raised: \n')
@@ -139,4 +155,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    OSKAR_pipeline_run()

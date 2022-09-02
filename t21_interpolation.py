@@ -21,7 +21,7 @@ def Ts2T21(data_path, sim_name, redshift):
     Ts_filename = 'TsMat_' + str(redshift) + sim_name + '.mat'
 
     Ts_cube_dict = loadmat(data_path + Ts_filename)
-    Ts_cube = Ts_cube_dict['Tlin']
+    Ts_cube = Ts_cube_dict['Ts']
 
     TR = (1 + redshift) * 2.725  # in K
     T21_cube = (27 * ((1 + redshift) / 10) ** 0.5) * (1 - TR / Ts_cube)  # in mK
@@ -168,12 +168,15 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
 def main():
     # ----------------------------------------------------------------------------#
-    data_path = './21cm_bigbox_256/'
-    sim_name = '__410_1_50_1020_0.05_1_4.2_0_8_15_1_0.75_232_1_2_0_Legacy_256.mat'
+    data_path = './21cm_bigbox_256/Ts_cubes/'
+    sim_name = ''
     N_pix = 256  # Data cube shape
     Dc_pix = 3  # Mpc
-    z_values = range(6, 22)  # redshift integer z from 21cm simulations
+    z_values = range(6, 49)  # redshift integer z from 21cm simulations
     N_z = len(z_values)
+    min_freq = 70
+    max_freq = 100.1
+    channel_bandwidth = 0.1098
 
     """
     -to interpolate and create .fits files at, MHz
@@ -181,8 +184,8 @@ def main():
     -note that all freq_values must be within (not inclusive) of the freq
     corresponding to z_values range
     """
-    freq_values = np.around(np.arange(72, 109, 0.025), decimals=3)
-    freq_sides = np.around(np.arange(72 - 0.025 / 2, 109, 0.025), decimals=4)
+    freq_values = np.around(np.arange(min_freq, max_freq, channel_bandwidth), decimals=3)
+    freq_sides = np.around(np.arange(min_freq - channel_bandwidth / 2, max_freq, channel_bandwidth), decimals=4)
     # ----------------------------------------------------------------------------#
 
     # initialise empty list, T21 arrays from redshifts 12 to 19 loaded to list
@@ -208,7 +211,7 @@ def main():
 
     plt.plot(z_values, T21_at_point)
     plt.savefig("redshift_interpolation.png")
-    input('If the linear interpolation in z looks good, press enter to continue.')
+    #input('If the linear interpolation in z looks good, press enter to continue.')
 
     data_interpolate_z = T21_lin_interpolation(T21_slices, z_values, freq_values, data_path,
                                                N_pix, Dc_pix)

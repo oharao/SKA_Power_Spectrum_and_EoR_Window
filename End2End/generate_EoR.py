@@ -42,9 +42,6 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, channels):
 def get_baselines_mag(name1, name2, filepath, freq_values):
     freq = '%0.3f' % float((freq_values / 1e6)[0])
 
-    print(os.getcwd())
-    print(os.path.exists(filepath + "/" + name1 + freq + name2))
-    print(filepath + "/" + name1 + freq + name2)
     (header, handle) = oskar.VisHeader.read(filepath + "/" + name1 + freq + name2)
     block = oskar.VisBlock.create_from_header(header)
     for i in range(header.num_blocks):
@@ -180,7 +177,7 @@ def plot_log(limits, gleam, signal, name):
     masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
 
     fig, ax = plt.subplots()
-    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot[21:], signal[21:, :],
+    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot[:], signal[:, :],
                       norm=LogNorm(vmin=10 ** 0, vmax=10 ** 14), cmap="jet")
     ax.set_xscale('log')
     ax.set_yscale('log')
@@ -241,7 +238,7 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     N_bins = 10000
 
     gleam_control = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2,
-                                                filepath, N_baselines, freq_values, freq_interval, channels,
+                                                control, N_baselines, freq_values, freq_interval, channels,
                                                 time_samples, Dc_values[20], delta_Dc_values[20],
                                                 wavelength_values[20], z_values[20], N_bins)
 
