@@ -24,7 +24,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        min_freq=0.070,
                        channel_bandwidth=0.0001098,
                        channels=275,
-                       intended_length=40,
+                       intended_length=10.0,
                        length_variation=0.00,
                        atten_skin_effect=False,
                        atten_conductivity=False,
@@ -32,7 +32,8 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        atten_thermal=False,
                        base_temperature=298.15,
                        cable_reflections=True,
-                       reflection_order=2
+                       reflection_order=1,
+                       z_l=60
                        ):
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -48,7 +49,9 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                 f'Attenuation Due To The Thermal Modification Of The Skin Effect: {atten_thermal} \n '
                 f'Base Temperature: {base_temperature} \n '
                 f'Cable Reflections: {cable_reflections} \n '
-                f'Reflection Order: {reflection_order} \n ')
+                f'Reflection Order: {reflection_order} \n '
+                f'Load Impedence: {z_l} \n '
+                )
 
     # Copy ./antenna_pos in order to generate a new telescope model to which gain_models may be applied.
     try:
@@ -78,7 +81,8 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                                                   atten_thermal=atten_thermal,
                                                   base_temperature=base_temperature,
                                                   cable_reflections=cable_reflections,
-                                                  reflection_order=reflection_order)
+                                                  reflection_order=reflection_order,
+                                                  z_l=z_l)
         logger.info(f'Success, the S21 Scattering parameters have been generated.')
     except Exception:
         logger.exception('The following exception was raised: \n')

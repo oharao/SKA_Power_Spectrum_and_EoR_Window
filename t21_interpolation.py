@@ -210,6 +210,9 @@ def main():
             T21_at_point[i, j] = T21_cube[rand_coord[0], rand_coord[1], rand_coord[2]]
 
     plt.plot(z_values, T21_at_point)
+    plt.xlabel('Z')
+    plt.ylabel('$T_{21}$ at random sample point')
+    plt.title('21cm Cosmological Signal Per Cube Interpolation')
     plt.savefig("redshift_interpolation.png")
     #input('If the linear interpolation in z looks good, press enter to continue.')
 
