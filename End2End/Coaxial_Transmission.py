@@ -166,7 +166,8 @@ class cable_decay:
         z_naught : float
             Impedance [ohms].
         """
-        self.z_0 = 138 * np.log10(self.b / self.a) / (self.eps_dielectric ** 0.5)
+        self.z_0 = (60 / self.eps_dielectric ** 0.5) * np.log(self.b / self.a)
+
         return self.z_0
 
     def loss_skin_effect(self):
@@ -202,7 +203,7 @@ class cable_decay:
         loss_tangent : np.array(float)
             Loss due to dielectric absorption [dB/m].
         """
-        self.loss_tangent = 27.28753 * np.sqrt(self.eps_dielectric) * self.tan_d * self.frequencies / const.c
+        self.loss_tangent = 27.28753 * np.sqrt(self.eps_dielectric) * self.tan_d * self.frequencies / (const.c)
         return self.loss_tangent
 
     def loss_thermal(self, temperature):
@@ -258,7 +259,7 @@ class cable_decay:
         attenuated_signal : float
             Input signal after various attenuation effects have been applied [dimensionless].
         """
-        attenuation = 0
+        attenuation = 0.01
 
         if incl_delta is True and incl_thermal is False:
             attenuation += self.loss_delta
@@ -272,7 +273,7 @@ class cable_decay:
         if incl_delta is False and incl_sigma is False and incl_tangent is False and incl_thermal is False:
             return np.ones(np.shape(self.frequencies))
         else:
-            return 10 ** (-(attenuation / 10) * length)
+            return 10 ** (-(attenuation / 18.8) * length)
 
     def cable_reflections(self, length, temperature, reflection_no, incl_delta=True, incl_sigma=True, incl_tangent=True,
                           incl_thermal=True):
@@ -305,11 +306,11 @@ class cable_decay:
 
         optical_length = np.abs(1 + 2 * reflection_no) * length
 
-        delay = float(optical_length / v_g)
+        delay = float((optical_length - length) / v_g)
 
         omega = 2 * np.pi * self.frequencies
 
-        A = (self.reflection_coeff ** (2 * reflection_no)) * self.atennuate(length, temperature,
+        A = (self.reflection_coeff ** (2 * reflection_no)) * self.atennuate(optical_length, temperature,
                                                                             incl_delta=incl_delta,
                                                                             incl_sigma=incl_sigma,
                                                                             incl_tangent=incl_tangent,
@@ -383,7 +384,6 @@ class cable_decay:
         self.cable_reflection_coefficient()
 
         if incl_reflections is True:
-            signal -= signal * self.reflection_coeff
             if reflection_no != 0:
                 for i in range(reflection_no):
                     reflected_signal = self.cable_reflections(length=length, temperature=temperature,
@@ -463,16 +463,16 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
 
 def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
                                atten_skin_effect, atten_conductivity, atten_tangent, atten_thermal, base_temperature,
-                               cable_reflections, reflection_order):
+                               cable_reflections, reflection_order, z_l):
     antenna_info = get_antenna_pos()
 
     world = perlin_noise_map()
 
     # Initalise an RG58 Coaxial Cable across the 1480 channels spaning freq bandwidth [72.0, 108.975]MHz.
     ska = cable_decay(max_freq=max_freq, min_freq=min_freq, channels=channels, channel_bandwidth=channel_bandwidth,
-                      a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.67 * 10 ** -8, rho_out=1.67 * 10 ** -8,
-                      mu_in=1.0, mu_out=1.0, roughness=0.0, eps_dielectric=2.2, rho_dielectric=1 * 10 ** 18,
-                      mu_dielectric=1, tan_d=3 * 10 ** -4, tcr_in=0.00404, tcr_out=0.00404, z_l=60.0)
+                      a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.71e-8, rho_out=1.71e-8,
+                      mu_in=1.0, mu_out=1.0, roughness=0.0, eps_dielectric=2.12, rho_dielectric=1e18,
+                      mu_dielectric=1, tan_d=1e-5, tcr_in=0.00404, tcr_out=0.00404, z_l=z_l)
 
     ska.skin_depth_in()
     ska.skin_depth_out()
