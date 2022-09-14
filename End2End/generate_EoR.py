@@ -150,12 +150,9 @@ def get_Pd_avg_unfolded_binning(name1, name2, filepath, N_baselines, freq_values
     P_d = avg_sorted_vis * 1e-52 * 1e3 * np.divide((Dc ** 2) * delta_Dc * wavelength ** 2, (2 * k_B) ** 2) * 1e6
     # eloy said A/T is 1000m^2, and conversion from Jy gives the power of -52
     k_parallel = get_k_parallel(z, sorted_delay_values)
-    k_interval = k_parallel[2] - k_parallel[1]
-    k_parallel_plot = np.arange(k_parallel[0] - k_interval / 2, k_parallel[-1] + k_interval * 1 / 2,
-                                k_interval)  # note I changed the end interval to 1/2 here.#
     k_perp = get_k_perp(baseline_block_boundaries, freq_values[20], Dc)
 
-    return P_d, k_parallel_plot, k_perp
+    return P_d, k_parallel, k_perp
 
 
 def get_limits(signal, Dc_values, z_values, wavelength_values):
@@ -215,7 +212,7 @@ def plot_lin(limits, gleam, signal, name):
     plt.savefig(name)
 
 
-def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channel_bandwidth):
+def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channel_bandwidth, dc_path):
     freq_values = np.arange(min_freq * 10 ** 9, max_freq * 10 ** 9, channel_bandwidth * 10 ** 9)
     freq_interval = 0.1098e6  # change this if channels change
 
@@ -226,10 +223,10 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     gleam_name1 = "gleam_all_freq_"
     gleam_name2 = "_MHz.vis"
 
-    Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/los_comoving_distance.csv'
+    Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path + '/los_comoving_distance.csv'
     Dc_values = get_Dc_values(Dc_file)
 
-    delta_Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/delta_los_comoving_distance.csv'
+    delta_Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path + '/delta_los_comoving_distance.csv'
     delta_Dc_values = get_delta_Dc_values(delta_Dc_file)
 
     # now try one channel only, can probably loop over other channels later

@@ -168,14 +168,14 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
 def main():
     # ----------------------------------------------------------------------------#
-    data_path = './21cm_bigbox_256/Ts_cubes/'
+    data_path = './21cm_bigbox_256/Ts_cubes_130-160MHz/'
     sim_name = ''
     N_pix = 256  # Data cube shape
     Dc_pix = 3  # Mpc
     z_values = range(6, 49)  # redshift integer z from 21cm simulations
     N_z = len(z_values)
-    min_freq = 70
-    max_freq = 100.1
+    min_freq = 130
+    max_freq = 160.1
     channel_bandwidth = 0.1098
 
     """
