@@ -251,18 +251,21 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     plot_log(control_limits, gleam_control, gleam_control[0], output_dir + "/control_log.png")
     plot_lin(control_limits, gleam_control, gleam_control[0], output_dir + "/control_lin.png")
 
-    diff = np.divide(np.abs(np.subtract(gleam[0], gleam_control[0], out=np.zeros_like(gleam[0]))), gleam[0],
-                     out=np.zeros_like(gleam[0]))
+    result_pd_log = np.ma.log(gleam[0])
+    control_pd_log = np.ma.log(gleam_control[0])
+    diff = np.subtract((result_pd_log.data - result_pd_log.min()) / (result_pd_log.max() - result_pd_log.min()),
+                       (control_pd_log.data - control_pd_log.min()) / (control_pd_log.max() - control_pd_log.min()),
+                       out=np.zeros_like(gleam[0]))
 
     P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
 
     fig, ax = plt.subplots()
-    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot, np.log(diff), vmax=5, vmin=-5, cmap="jet")
+    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot, diff, cmap="jet")
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
     ax.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    fig.colorbar(c, label='Log($P_d$ $[mK^2(Mpc/h)^3]$)')
+    fig.colorbar(c, label='Normalised Residual $[mK^2(Mpc/h)^3]$)')
 
     ax.set_ylim(3 * 10 ** -3, k_parallel_plot.max())
     ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
