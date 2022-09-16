@@ -115,44 +115,83 @@ def get_delta_Dc_values(delta_Dc_file):
 
 
 # same as Pd_avg_unfolded but with binning
-def get_Pd_avg_unfolded_binning(name1, name2, filepath, N_baselines, freq_values, freq_interval, channels,
+def get_Pd_avg_unfolded_binning(name1, name2, control_path, filepath, N_baselines, freq_values, freq_interval, channels,
                                 time_samples, Dc, delta_Dc, wavelength, z, N_bins):
     # every 130816th baselines are of the same magnitude because it is the same pair rotated around Earth
     baseline_mag = get_baselines_mag(name1, name2, filepath, freq_values)[0]
     sorted_baseline_mag = np.sort(baseline_mag)
+
     delay_values = get_delay_times(freq_values, freq_interval)
     sorted_delay_values = np.sort(delay_values)
+
     vis_position = get_vis_boundaries(sorted_baseline_mag, N_bins)[0]
 
     baseline_block_boundaries = get_vis_boundaries(sorted_baseline_mag, N_bins)[1]
+
     sum_sorted_vis = np.zeros([len(sorted_delay_values), N_bins])
+    sum_sorted_vis_control = np.zeros([len(sorted_delay_values), N_bins])
+    sum_sorted_vis_residual = np.zeros([len(sorted_delay_values), N_bins])
 
     for j in np.arange(time_samples):
         vis_data = delay_transform(name1, name2, filepath, j * N_baselines, N_baselines, freq_values, channels)
+        vis_data_control = delay_transform(name1, name2, control_path, j * N_baselines, N_baselines, freq_values,
+                                           channels)
+        vis_data_residual = vis_data - vis_data_control
+
         vis_delay = np.abs(vis_data) ** 2  # get modulus squared
+        vis_delay_control = np.abs(vis_data_control) ** 2
+        vis_delay_residual = np.abs(vis_data_residual) ** 2
+
         # try sorting by baseline magnitude
         sortedi_vis_delay = vis_delay[:, baseline_mag.argsort()]
+        sortedi_vis_delay_control = vis_delay_control[:, baseline_mag.argsort()]
+        sortedi_vis_delay_residual = vis_delay_residual[:, baseline_mag.argsort()]
+
         # sort by delay values
         sorted_vis_delay = sortedi_vis_delay[delay_values.argsort(), :]
+        sorted_vis_delay_control = sortedi_vis_delay_control[delay_values.argsort(), :]
+        sorted_vis_delay_residual = sortedi_vis_delay_residual[delay_values.argsort(), :]
 
         sorted_vis_delay_bins = np.zeros([channels, N_bins])
+        sorted_vis_delay_bins_control = np.zeros([channels, N_bins])
+        sorted_vis_delay_bins_residual = np.zeros([channels, N_bins])
         for q in range(N_bins):
             if vis_position[q] != vis_position[q + 1]:
                 sorted_vis_delay_bins[:, q] = np.sum(sorted_vis_delay[:, vis_position[q]:vis_position[q + 1] - 1],
                                                      axis=-1) / (vis_position[q + 1] - vis_position[q])
-
+                sorted_vis_delay_bins_control[:, q] = np.sum(
+                    sorted_vis_delay_control[:, vis_position[q]:vis_position[q + 1] - 1], axis=-1) / (
+                                                                  vis_position[q + 1] - vis_position[q])
+                sorted_vis_delay_bins_residual[:, q] = np.sum(
+                    sorted_vis_delay_residual[:, vis_position[q]:vis_position[q + 1] - 1], axis=-1) / (
+                                                                   vis_position[q + 1] - vis_position[q])
         sum_sorted_vis = sum_sorted_vis + sorted_vis_delay_bins
+        sum_sorted_vis_control = sum_sorted_vis_control + sorted_vis_delay_bins_control
+        sum_sorted_vis_residual = sum_sorted_vis_residual + sorted_vis_delay_bins_residual
 
     avg_sorted_vis = sum_sorted_vis / time_samples
+    avg_sorted_vis_control = sum_sorted_vis_control / time_samples
+    avg_sorted_vis_residual = sum_sorted_vis_residual / time_samples
 
     k_B = 1.38e-23  # Boltzman constant
+
     # delayed power spectrum, also A_e?? 40*N of gleam
     P_d = avg_sorted_vis * 1e-52 * 1e3 * np.divide((Dc ** 2) * delta_Dc * wavelength ** 2, (2 * k_B) ** 2) * 1e6
+    P_d_control = avg_sorted_vis_control * 1e-52 * 1e3 * np.divide((Dc ** 2) * delta_Dc * wavelength ** 2,
+                                                                   (2 * k_B) ** 2) * 1e6
+    P_d_residual = avg_sorted_vis_residual * 1e-52 * 1e3 * np.divide((Dc ** 2) * delta_Dc * wavelength ** 2,
+                                                                     (2 * k_B) ** 2) * 1e6
+
     # eloy said A/T is 1000m^2, and conversion from Jy gives the power of -52
     k_parallel = get_k_parallel(z, sorted_delay_values)
+
     k_perp = get_k_perp(baseline_block_boundaries, freq_values[20], Dc)
 
-    return P_d, k_parallel, k_perp
+    eor = P_d, k_parallel, k_perp
+    eor_control = P_d_control, k_parallel, k_perp
+    eor_residual = P_d_residual, k_parallel, k_perp
+
+    return eor, eor_control, eor_residual
 
 
 def get_limits(signal, Dc_values, z_values, wavelength_values):
@@ -168,14 +207,14 @@ def get_limits(signal, Dc_values, z_values, wavelength_values):
     return horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg
 
 
-def plot_log(limits, gleam, signal, name):
+def plot_log(limits, gleam, signal, name, vmax=1e14, vmin=1e0, cmap='jet'):
     horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg = limits
     P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
     masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
 
     fig, ax = plt.subplots()
     c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot[:], signal[:, :],
-                      norm=LogNorm(vmin=10 ** 0, vmax=10 ** 14), cmap="jet")
+                      norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap)
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
@@ -191,14 +230,14 @@ def plot_log(limits, gleam, signal, name):
     plt.savefig(name)
 
 
-def plot_lin(limits, gleam, signal, name):
+def plot_lin(limits, gleam, signal, name, vmax=1e14, vmin=1e0, cmap='jet'):
     horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg = limits
     P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
     masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
 
     fig2, ax2 = plt.subplots()
     c = ax2.pcolormesh(k_perp_plot[:-1], k_parallel_plot, signal,
-                       norm=LogNorm(vmin=10 ** 0, vmax=10 ** 14), cmap="jet")
+                       norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap)
     ax2.set_ylim(k_parallel_plot.min(), k_parallel_plot.max())
     ax2.set_xlim(k_perp_plot.min(), 3.8)
     ax2.set_xlabel('$k_\perp [h Mpc^{-1}]$')
@@ -234,40 +273,21 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     N_baselines = 130816
     N_bins = 10000
 
-    gleam_control = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2,
-                                                control, N_baselines, freq_values, freq_interval, channels,
-                                                time_samples, Dc_values[20], delta_Dc_values[20],
-                                                wavelength_values[20], z_values[20], N_bins)
-
-    gleam = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath, N_baselines, freq_values,
-                                        freq_interval, channels, time_samples, Dc_values[20], delta_Dc_values[20],
-                                        wavelength_values[20], z_values[20], N_bins)
+    gleam, gleam_control, gleam_residual = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, control, filepath,
+                                                                       N_baselines, freq_values, freq_interval,
+                                                                       channels, time_samples, Dc_values[20],
+                                                                       delta_Dc_values[20], wavelength_values[20],
+                                                                       z_values[20], N_bins)
 
     limits = get_limits(gleam, Dc_values, z_values, wavelength_values)
     control_limits = get_limits(gleam_control, Dc_values, z_values, wavelength_values)
+    residual_limits = get_limits(gleam_residual, Dc_values, z_values, wavelength_values)
 
     plot_log(limits, gleam, gleam[0], output_dir + "/result_log.png")
     plot_lin(limits, gleam, gleam[0], output_dir + "/result_lin.png")
     plot_log(control_limits, gleam_control, gleam_control[0], output_dir + "/control_log.png")
     plot_lin(control_limits, gleam_control, gleam_control[0], output_dir + "/control_lin.png")
-
-    result_pd_log = np.ma.log(gleam[0])
-    control_pd_log = np.ma.log(gleam_control[0])
-    diff = np.subtract((result_pd_log.data - result_pd_log.min()) / (result_pd_log.max() - result_pd_log.min()),
-                       (control_pd_log.data - control_pd_log.min()) / (control_pd_log.max() - control_pd_log.min()),
-                       out=np.zeros_like(gleam[0]))
-
-    P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
-
-    fig, ax = plt.subplots()
-    c = ax.pcolormesh(k_perp_plot[:-1], k_parallel_plot, diff, cmap="jet")
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlabel('$k_\perp [h Mpc^{-1}]$')
-    ax.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    fig.colorbar(c, label='Normalised Residual $[mK^2(Mpc/h)^3]$)')
-
-    ax.set_ylim(3 * 10 ** -3, k_parallel_plot.max())
-    ax.set_xlim(k_perp_plot.min(), k_perp_plot.max())
-
-    plt.savefig(output_dir + "/residual.png")
+    plot_log(residual_limits, gleam_residual, gleam_residual[0], output_dir + "/residual_log.png",
+             vmax=gleam_residual[0].max(), vmin=1e0)
+    plot_lin(residual_limits, gleam_residual, gleam_residual[0], output_dir + "/residual_lin.png",
+             vmax=gleam_residual[0].max(), vmin=1e0)

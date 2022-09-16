@@ -132,7 +132,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
         logger.info(f'Plotting the EoR windows for visibilities {date}_vis')
 
         # Specify control visibility data. Generated using simulation pipeline: all antenna gains = 1+0j.
-        control = 'control.vis'
+        control = dc_path + '_control.vis'
 
         # Create directory to write SKA window plots to.
         result_dir = date + '_results'
