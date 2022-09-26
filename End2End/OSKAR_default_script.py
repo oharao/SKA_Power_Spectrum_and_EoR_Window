@@ -2,6 +2,8 @@ from astropy.io import fits
 from astropy.time import Time, TimeDelta
 import numpy
 import os
+import csv
+import math
 
 
 def get_start_time(ra0_deg, length_sec):
@@ -13,7 +15,7 @@ def get_start_time(ra0_deg, length_sec):
     return start.value
 
 
-def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
+def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False, foregrounds=True, dc_path=None):
     """Main function."""
     import oskar
     # Telescope and observation parameters.
@@ -37,7 +39,7 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
          flux, zeros, zeros, zeros, ref_freq, alpha))
 
     # Create the sky model.
-    sky = oskar.Sky.from_array(sky_array)
+    sky_gleam = oskar.Sky.from_array(sky_array)
 
     # Create directory to write OSKAR visibilities.
     os.mkdir(date + '_vis/')
@@ -48,16 +50,6 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
         frequency_hz = start_frequency_hz + c * frequency_inc_hz
         freq_name = "freq_%.3f_MHz" % (frequency_hz / 1e6)
         root_name = "gleam_all_%s" % freq_name
-
-        if eor is True:
-            eor_file = 'Freq%.3f' + 'MHz_interpolate_T21_slices_allall27_CMB.fits'
-            sky_eor = oskar.Sky.from_fits_file(
-                eor_file,
-                min_peak_fraction=-1e6,
-                min_abs_val=-1e6,
-                frequency_hz=frequency_hz
-            )
-            sky.append(sky_eor)
 
         # Run simulation.
         params = {
@@ -72,7 +64,7 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
             "observation/num_time_steps": 1,
             "observation/start_time_utc": get_start_time(ra0_deg, length_sec),
             "observation/length": length_sec,
-            "telescope/input_directory": date+'_telescope_model',
+            "telescope/input_directory": date + '_telescope_model',
             "telescope/normalise_beams_at_phase_centre": False,
             "telescope/aperture_array/array_pattern/normalise": True,
             "telescope/aperture_array/element_pattern/normalise": True,
@@ -81,12 +73,41 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
             "interferometer/channel_bandwidth_hz": frequency_inc_hz,
             "interferometer/time_average_sec": 0.9,
         }
+
+        composite_sky_model = sky_gleam.create_copy()
+
+        if eor is True:
+            root_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path
+
+            eor_file = root_path + '/' + freq_name + '_interpolate_T21_slices.fits'
+            sky_eor = oskar.Sky.from_fits_file(
+                eor_file,
+                min_peak_fraction=-1e6,
+                min_abs_val=-1e6,
+                frequency_hz=frequency_hz
+            )
+            if foregrounds is True:
+                composite_sky_model.append(sky_eor)
+            else:
+                composite_sky_model = sky_eor.create_copy()
+
+            pixel_size_path = root_path + '/pixel_size_deg.csv'
+
+            with open(pixel_size_path, 'r') as file:
+                reader = csv.reader(file)
+                data = list(reader)
+                freq_index = data[0].index('%s' % float("%.3f" % (frequency_hz / 1e6)))
+                pixel_size_deg = data[1][freq_index]
+
+            params["interferometer/uv_filter_min"] = 1.0 / math.radians(float(pixel_size_deg)*256)
+            params["interferometer/uv_filter_max"] = 1.0 / (2.0*math.radians(float(pixel_size_deg)))
+
         settings_sim = oskar.SettingsTree("oskar_sim_interferometer")
         settings_sim.from_dict(params)
 
         # Run simulation.
         settings_sim["interferometer/oskar_vis_filename"] = date + '_vis/' + root_name + ".vis"
         sim = oskar.Interferometer(settings=settings_sim)
-        sim.set_sky_model(sky)
+        sim.set_sky_model(composite_sky_model)
         sim.run()
         del sim

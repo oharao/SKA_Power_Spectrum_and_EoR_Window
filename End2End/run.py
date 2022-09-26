@@ -22,8 +22,8 @@ def to_hdf5(gains, frequencies, folder):
 
 def OSKAR_pipeline_run(max_freq=0.1001,
                        min_freq=0.070,
-                       channel_bandwidth=0.0001098,
-                       channels=275,
+                       channel_bandwidth=0.000012,
+                       channels=1509,
                        intended_length=10.0,
                        length_variation=0.00,
                        atten_skin_effect=False,
@@ -31,10 +31,13 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        atten_tangent=False,
                        atten_thermal=False,
                        base_temperature=298.15,
-                       cable_reflections=True,
-                       reflection_order=1,
+                       cable_reflections=False,
+                       reflection_order=0,
                        z_l=60,
-                       dc_path='130-160MHz'
+                       dc_path='test',
+                       eor=False,
+                       foregrounds=True,
+                       delete_vis=True
                        ):
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -51,7 +54,10 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                 f'Base Temperature: {base_temperature} \n '
                 f'Cable Reflections: {cable_reflections} \n '
                 f'Reflection Order: {reflection_order} \n '
-                f'Load Impedence: {z_l} \n '
+                f'Load Impedance: {z_l} \n '
+                f'21cm Cosmological Signal: {eor} \n'
+                f'Foreground Signal: {foregrounds} \n'
+                f'Deleting Visibilities: {delete_vis} \n'
                 )
 
     # Copy ./antenna_pos in order to generate a new telescope model to which gain_models may be applied.
@@ -60,7 +66,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
 
         # Create temp dir copy of antenna pos + gains
         telescope_dir = date + '_telescope_model/'
-        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos/', telescope_dir)
+        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos_core/', telescope_dir)
 
         logger.info(f'Success, the telescope model was created: {telescope_dir}.\n')
     except Exception:
@@ -92,7 +98,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
     # Save S21 scattering parameters for each telescope to the corresponding station map found in the telescope model.
     try:
         logger.info(f'Saving the S21 parameters for each 512 stations to the telescope model as gain_model.h5 files.')
-        for n in range(512):
+        for n in range(244):
             rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['phasor'].values
             data = []
             [data.append(np.array(rows[i])) for i in range(len(rows))]
@@ -108,7 +114,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
         logger.info('Running OSKAR interferometer simulations with the given telescope model.')
 
         # Run OSKAR for the generated telescope model.
-        run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth)
+        run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor, foregrounds, dc_path)
 
         logger.info(f'Success, OSKAR visibilities have been generated to {date}_vis. \n')
     except Exception:
@@ -147,16 +153,17 @@ def OSKAR_pipeline_run(max_freq=0.1001,
         raise
 
     # Delete the OSKAR visibilities (approx 40 GB) to free storage space occupied by redundant data.
-    try:
-        logger.info(f'Deleting used visibilities {date}_vis')
+    if delete_vis is True:
+        try:
+            logger.info(f'Deleting used visibilities {date}_vis')
 
-        # Removing visibilities to conserve storage space.
-        shutil.rmtree(date + '_vis')
+            # Removing visibilities to conserve storage space.
+            shutil.rmtree(date + '_vis')
 
-        logger.info('Success. \n')
-    except Exception:
-        logger.exception('The following exception was raised: \n')
-        raise
+            logger.info('Success. \n')
+        except Exception:
+            logger.exception('The following exception was raised: \n')
+            raise
 
 
 if __name__ == '__main__':

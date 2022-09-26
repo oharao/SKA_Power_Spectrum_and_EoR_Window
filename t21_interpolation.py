@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
 from scipy.integrate import quad
+from scipy import interpolate
 import csv
 
 """
@@ -67,25 +68,26 @@ def find_pix_size(Dc_pix, N_pix, freq_values, data_path):
 
 
 # produce a .FITS file with image_data and appropriate headers
-def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg,
+def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg, mean,
                 ra_deg=60.0, dec_deg=-30.0, units="mK"):
     hdu = fits.PrimaryHDU()
     header = hdu.header
     header["CTYPE1"] = "RA---SIN"
     header["CRVAL1"] = ra_deg
-    header["CRPIX1"] = N_pix
+    header["CRPIX1"] = 1 + (N_pix / 2)
     header["CDELT1"] = -pixel_size_deg
     header["CTYPE2"] = "DEC--SIN"
     header["CRVAL2"] = dec_deg
-    header["CRPIX2"] = N_pix
+    header["CRPIX2"] = 1 + (N_pix / 2)
     header["CDELT2"] = pixel_size_deg
     header["BUNIT"] = units
     header["CTYPE3"] = "Frequency MHz"
     header["CRVAL3"] = freq
-    hdu = fits.PrimaryHDU(image_data, header)
+    hdu = fits.PrimaryHDU((image_data - mean), header)
     hdu.writeto(data_path + filename, overwrite=True)
 
-    print('FITS file created for ' + str(freq) + 'MHz')
+    print('FITS file created for ' + str(freq) + 'MHz)')
+    print(mean)
 
 
 """
@@ -111,16 +113,19 @@ def T21_lin_interpolation(T21_slices, ini_z_values, final_freq_values, data_path
 
     pixel_size_deg = find_pix_size(Dc_pix, N_pix, final_freq_values, data_path)
 
-    data_interpolate_z = []
-    for k in range(N_final):
-        floor_z = np.floor(final_z_values[k])
-        position = ini_z_values.index(floor_z)
-        data = T21_slices[position] + (final_z_values[k] % 1) * gradient_in_z[position] + 2725  # CMB in mK
+    data_interpolate_z = np.zeros([N_final, np.array(T21_slices).shape[1], np.array(T21_slices).shape[2]])
+    for i in range(np.array(T21_slices).shape[1]):
+        for j in range(np.array(T21_slices).shape[2]):
+            f = interpolate.interp1d(ini_z_values, np.array(T21_slices)[:, i, j], kind='cubic')
+            data_interpolate_z[:, i, j] = f(final_z_values)
 
+    mean = np.array([i.mean() for i in data_interpolate_z])
+
+    for k in range(N_final):
         str_freq = format(final_freq_values[k], ".3f")
-        filename = 'Freq' + str_freq + 'MHz_interpolate_T21_slices_allall27_CMB.fits'
-        create_fits(data_path, data, filename, final_freq_values[k], N_pix, pixel_size_deg[k])
-        data_interpolate_z.append(data)
+        filename = 'freq_' + str_freq + '_MHz_interpolate_T21_slices.fits'
+        #create_fits(data_path, data_interpolate_z[k], filename, final_freq_values[k], N_pix, pixel_size_deg[k], mean[k])
+        create_fits(data_path, np.tile(data_interpolate_z[k] + 2725, (3,3))[int(N_pix/2):-int(N_pix/2), int(N_pix/2):-int(N_pix/2)], filename, final_freq_values[k], N_pix*2, pixel_size_deg[k], mean[k])
 
     return data_interpolate_z
 
@@ -168,15 +173,15 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
 def main():
     # ----------------------------------------------------------------------------#
-    data_path = './21cm_bigbox_256/Ts_cubes_130-160MHz/'
+    data_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/cmb/'
     sim_name = ''
     N_pix = 256  # Data cube shape
     Dc_pix = 3  # Mpc
     z_values = range(6, 49)  # redshift integer z from 21cm simulations
     N_z = len(z_values)
-    min_freq = 130
-    max_freq = 160.1
-    channel_bandwidth = 0.1098
+    min_freq = 70
+    max_freq = 100.1
+    channel_bandwidth = 0.0120
 
     """
     -to interpolate and create .fits files at, MHz
@@ -214,7 +219,7 @@ def main():
     plt.ylabel('$T_{21}$ at random sample point')
     plt.title('21cm Cosmological Signal Per Cube Interpolation')
     plt.savefig("redshift_interpolation.png")
-    #input('If the linear interpolation in z looks good, press enter to continue.')
+    # input('If the linear interpolation in z looks good, press enter to continue.')
 
     data_interpolate_z = T21_lin_interpolation(T21_slices, z_values, freq_values, data_path,
                                                N_pix, Dc_pix)
