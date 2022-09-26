@@ -49,6 +49,16 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth):
         freq_name = "freq_%.3f_MHz" % (frequency_hz / 1e6)
         root_name = "gleam_all_%s" % freq_name
 
+        if eor is True:
+            eor_file = 'Freq%.3f' + 'MHz_interpolate_T21_slices_allall27_CMB.fits'
+            sky_eor = oskar.Sky.from_fits_file(
+                eor_file,
+                min_peak_fraction=-1e6,
+                min_abs_val=-1e6,
+                frequency_hz=frequency_hz
+            )
+            sky.append(sky_eor)
+
         # Run simulation.
         params = {
             "simulator/max_sources_per_chunk": 20000,
