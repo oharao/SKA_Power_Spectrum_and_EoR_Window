@@ -34,10 +34,10 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        cable_reflections=False,
                        reflection_order=0,
                        z_l=60,
-                       dc_path='test',
+                       dc_path='70-100MHz',
                        eor=False,
                        foregrounds=True,
-                       delete_vis=True
+                       delete_vis=False
                        ):
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S')

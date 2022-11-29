@@ -10,8 +10,7 @@ channels = 2509
 
 date = '20221123_175206'
 
-
-control = '20221124_100856_vis'
+control = '70-100MHz_control.vis'
 #os.mkdir(date + '_results')
 
 plot_eor(control, date + '_vis', date + '_results',
