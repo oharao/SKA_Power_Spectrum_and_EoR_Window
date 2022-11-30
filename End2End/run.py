@@ -23,7 +23,7 @@ def to_hdf5(gains, frequencies, folder):
 def OSKAR_pipeline_run(max_freq=0.1001,
                        min_freq=0.070,
                        channel_bandwidth=0.000012,
-                       channels=1509,
+                       channels=2509,
                        intended_length=10.0,
                        length_variation=0.00,
                        atten_skin_effect=False,
