@@ -8,7 +8,7 @@ min_freq = 0.070  # GHz
 channel_bandwidth = 0.000012
 channels = 2509
 
-date = '20221123_175206'
+date = '20221201_180130'
 
 control = '70-100MHz_control.vis'
 #os.mkdir(date + '_results')

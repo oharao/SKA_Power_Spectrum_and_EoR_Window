@@ -97,7 +97,7 @@ appropriate headers to capture the data.
 
 
 def T21_lin_interpolation(T21_slices, ini_z_values, final_freq_values, data_path,
-                          N_pix, Dc_pix):
+                          N_pix, Dc_pix, channel_bandwidth):
     N_ini = len(ini_z_values)
     if N_ini < 2:
         print('Error: Insufficient data to perform interpolation.')
@@ -125,7 +125,7 @@ def T21_lin_interpolation(T21_slices, ini_z_values, final_freq_values, data_path
         str_freq = format(final_freq_values[k], ".3f")
         filename = 'freq_' + str_freq + '_MHz_interpolate_T21_slices.fits'
         #create_fits(data_path, data_interpolate_z[k], filename, final_freq_values[k], N_pix, pixel_size_deg[k], mean[k])
-        create_fits(data_path, np.tile(data_interpolate_z[k] + 2725, (3,3))[int(N_pix/2):-int(N_pix/2), int(N_pix/2):-int(N_pix/2)], filename, final_freq_values[k], N_pix*2, pixel_size_deg[k], mean[k])
+        create_fits(data_path, np.tile(data_interpolate_z[k] * np.sqrt(channel_bandwidth * 1e6), (3,3))[int(N_pix/2):-int(N_pix/2), int(N_pix/2):-int(N_pix/2)], filename, final_freq_values[k], N_pix*2, pixel_size_deg[k], mean[k])
 
     return data_interpolate_z
 
@@ -173,7 +173,7 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
 def main():
     # ----------------------------------------------------------------------------#
-    data_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/cmb/'
+    data_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/test/'
     sim_name = ''
     N_pix = 256  # Data cube shape
     Dc_pix = 3  # Mpc
@@ -222,7 +222,7 @@ def main():
     # input('If the linear interpolation in z looks good, press enter to continue.')
 
     data_interpolate_z = T21_lin_interpolation(T21_slices, z_values, freq_values, data_path,
-                                               N_pix, Dc_pix)
+                                               N_pix, Dc_pix, channel_bandwidth)
 
     get_los_comoving_distances(freq_values, freq_sides, data_path)
 

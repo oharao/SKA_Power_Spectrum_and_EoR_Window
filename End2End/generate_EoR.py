@@ -37,7 +37,7 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, channels, basel
 
     window_vector = windows.blackmanharris(channels)
     window_array = np.tile(window_vector**2, (len(vis_data[0]), 1)).T
-    window_norm = np.sum(window_vector)
+    window_norm = np.sum(window_vector**2)
     vis_data2 = vis_data * window_array / window_norm
     vis_delay = fft(vis_data2, axis=0)  # normalisation by 1/N because norm=forward/backwards does not work
     if control is False:
@@ -257,20 +257,21 @@ def plot_lin(limits, gleam, signal, name, delay, vmax=1e8, vmin=1e0, cmap='gnupl
     c = ax1.pcolormesh(k_perp_plot[:-1], k_parallel_plot, signal,
                        norm=LogNorm(), cmap=cmap)
 
-    ax2 = ax1.twinx()
+    #ax2 = ax1.twinx()
 
     ax1.set_ylim(k_parallel_plot.min(), k_parallel_plot.max())
     ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max())
-    ax2.set_ylim(delay.min() * 1e9, delay.max() * 1e9)
+    #ax2.set_ylim(delay.min() * 1e9, delay.max() * 1e9)
     ax1.set_xlabel('$k_\perp [h Mpc^{-1}]$')
     ax1.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    ax2.set_ylabel('Log(Delay) $[ns]$')
-    fig.colorbar(c, label='$P_d$ $[mK^2(Mpc/h)^3]$', pad=0.19)
+    #ax2.set_ylabel('Log(Delay) $[ns]$')
+    fig.colorbar(c, label='$P_d$ $[mK^2(Mpc/h)^3]$')#, pad=0.19)
 
     ax1.plot(horizon_limit_x, horizon_limit_y, color='white')
     ax1.plot(horizon_limit_x, beam_limit_y, color='black')
     ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='white')
     ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black')
+    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
     plt.savefig(name)
 
 
@@ -314,3 +315,5 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     plot_lin(limits, gleam_control, gleam_control[0], output_dir + "/control_lin.png", delays)
     plot_log(limits, gleam_residual, gleam_residual[0], output_dir + "/residual_log.png", delays)
     plot_lin(limits, gleam_residual, gleam_residual[0], output_dir + "/residual_lin.png", delays)
+    plot_log(limits, gleam_residual, gleam_control[0]/gleam[0], output_dir + "/ratio_log.png", delays)
+    plot_lin(limits, gleam_residual, gleam_control[0]/gleam[0], output_dir + "/ratio_lin.png", delays)
