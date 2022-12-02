@@ -40,7 +40,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        delete_vis=False
                        ):
     # Get datetime of simulation for file indexing.
-    date = datetime.now().strftime('%Y%m%d_%H%M%S')
+    date = datetime.now().strftime('%Y%m%d_%H%M%S%ff')
 
     # Initialise the logger and insert relevant information including keyword arguments.
     logger = init_logger(date)
