@@ -91,7 +91,7 @@ if __name__ == '__main__':
     for k in range(len(freq_values)):
         str_freq = format(freq_values[k] * 1e-6, ".3f")
         file_path = root + 'freq_' + str_freq + '_MHz_interpolate_T21_slices.fits'
-        ps[k, :] = main(file_path)[0]
+        ps[k, :] = main(file_path, freq_interval)[0]
 
     theta_axis = main(file_path)[1]
 
@@ -103,6 +103,8 @@ if __name__ == '__main__':
     baseline_lengths = get_baseline(theta_axis, freq_values[int(len(freq_values) / 2)], 2)
     k_perp = get_k_perp(baseline_lengths, freq_values[int(len(freq_values) / 2)], Dc[int(len(Dc) / 2)])
 
+    P_d = ps[:, 1:-1].transpose()
+
     plt.clf()
     c = plt.pcolormesh(k_parallel, k_perp[1:-1],  ps[:, 1:-1].transpose(), norm=LogNorm(), cmap='gnuplot')
     plt.xscale('log')
@@ -110,5 +112,6 @@ if __name__ == '__main__':
     plt.xlabel('$k_\perp [h Mpc^{-1}]$')
     plt.ylabel('$k_\parallel [h Mpc^{-1}]$')
     plt.xlim(0.0071873657302871305, 1.3081005629122575)
+    plt.ylim(8e-2, 1.3e0)
     plt.colorbar(c)
     plt.savefig('ps_test.png')

@@ -137,22 +137,29 @@ def get_Pd_avg_unfolded_binning(name1, name2, control_path, filepath, N_baseline
 
     vis_position = get_vis_boundaries(sorted_baseline_mag, N_bins)[0]
 
-    baseline_block_boundaries = get_vis_boundaries(sorted_baseline_mag, N_bins)[1]
-
     sum_sorted_vis = np.zeros([len(sorted_delay_values), N_bins])
     sum_sorted_vis_control = np.zeros([len(sorted_delay_values), N_bins])
     sum_sorted_vis_residual = np.zeros([len(sorted_delay_values), N_bins])
 
     for j in np.arange(time_samples):
-        vis_data, N_start, N_stop = delay_transform(name1, name2, filepath, j * N_baselines, N_baselines, freq_values,
+        delay_data, N1, N2 = delay_transform(name1, name2, filepath, j * N_baselines, N_baselines, freq_values,
                                                     channels, baseline_mag)
+        vis_data = np.zeros((delay_values.shape[0], baseline_mag.shape[0]), dtype='complex_')
+        vis_data[:, N1:N2] = delay_data
 
-        vis_data_control = delay_transform(name1, name2, control_path, j * N_baselines, N_baselines, freq_values,
-                                           channels, baseline_mag, control=True)
-        vis_data_residual = vis_data - vis_data_control[:, N_start:N_stop]
+        delay_data_control, N3, N4 = delay_transform(name1, name2, control_path, j * N_baselines,
+                                                                            N_baselines, freq_values,
+                                                                            channels, baseline_mag)
+        vis_data_control = np.zeros((delay_values.shape[0], baseline_mag.shape[0]), dtype='complex_')
+        vis_data_control[:, N3:N4] = delay_data_control
+
+        N_start = max(N1, N3)
+        N_stop = min(N2, N4)
+
+        vis_data_residual = vis_data[:, N_start:N_stop] - vis_data_control[:, N_start:N_stop]
 
         vis_delay = np.abs(vis_data) ** 2  # get modulus squared
-        vis_delay_control = np.abs(vis_data_control) ** 2
+        vis_delay_control = np.abs(vis_data_control[:, N_start:N_stop]) ** 2
         vis_delay_residual = np.abs(vis_data_residual) ** 2
 
         # sort by delay values
@@ -190,6 +197,8 @@ def get_Pd_avg_unfolded_binning(name1, name2, control_path, filepath, N_baseline
             wavelength[:, None] ** 2 / (2 * k_B)) ** 2
     P_d_residual = (avg_sorted_vis_residual * 1e-52 * 1e6) * (1e6 / (freq_interval ** 2 * wavelength[:, None] ** 2)) * Dc[:, None] ** 2 * np.insert(np.insert(delta_Dc, -1, delta_Dc[-1]), 0, delta_Dc[0])[:, None] * (
             wavelength[:, None] ** 2 / (2 * k_B)) ** 2
+
+    baseline_block_boundaries = get_vis_boundaries(sorted_baseline_mag[N_start:N_stop], N_bins)[1]
 
     # eloy said A/T is 1000m^2, and conversion from Jy gives the power of -52
     k_parallel = get_k_parallel(z[delay_values.argsort()], sorted_delay_values)
@@ -310,10 +319,6 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     limits = get_limits(gleam, Dc_values, z_values, wavelength_values)
 
     plot_log(limits, gleam, gleam[0], output_dir + "/result_log.png", delays)
-    plot_lin(limits, gleam, gleam[0], output_dir + "/result_lin.png", delays)
     plot_log(limits, gleam_control, gleam_control[0], output_dir + "/control_log.png", delays)
-    plot_lin(limits, gleam_control, gleam_control[0], output_dir + "/control_lin.png", delays)
     plot_log(limits, gleam_residual, gleam_residual[0], output_dir + "/residual_log.png", delays)
-    plot_lin(limits, gleam_residual, gleam_residual[0], output_dir + "/residual_lin.png", delays)
     plot_log(limits, gleam_residual, gleam_control[0]/gleam[0], output_dir + "/ratio_log.png", delays)
-    plot_lin(limits, gleam_residual, gleam_control[0]/gleam[0], output_dir + "/ratio_lin.png", delays)

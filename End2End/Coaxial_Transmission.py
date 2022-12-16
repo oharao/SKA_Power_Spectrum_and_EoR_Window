@@ -302,7 +302,7 @@ class cable_decay:
             Generated S_21 contribution due to nth order cable reflection.
         """
 
-        v_g = const.c / np.sqrt(self.eps_dielectric * self.mu_dielectric)  # m/s
+        v_g = const.c / (2*np.sqrt(self.eps_dielectric * self.mu_dielectric))  # m/s
 
         optical_length = np.abs(1 + 2 * reflection_no) * length
 
