@@ -203,7 +203,7 @@ def get_Pd_avg_unfolded_binning(name1, name2, control_path, filepath, N_baseline
     # eloy said A/T is 1000m^2, and conversion from Jy gives the power of -52
     k_parallel = get_k_parallel(z[delay_values.argsort()], sorted_delay_values)
 
-    k_perp = get_k_perp(baseline_block_boundaries, freq_values[138], Dc[138])
+    k_perp = get_k_perp(baseline_block_boundaries, freq_values[int(Dc.shape[0]/2)], Dc[int(Dc.shape[0]/2)])
 
     eor = P_d, k_parallel, k_perp
     eor_control = P_d_control, k_parallel, k_perp
@@ -233,7 +233,6 @@ def plot_log(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnup
     fig, ax1 = plt.subplots()
     c = ax1.pcolormesh(k_perp_plot[:-1], k_parallel_plot[:], signal[:, :],
                        norm=LogNorm(), cmap=cmap)
-
     ax2 = ax1.twinx()
 
     ax1.set_xscale('log')
@@ -253,6 +252,37 @@ def plot_log(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnup
     ax2.set_ylim(delay[21:].min() * 1e9, delay.max() * 1e9)
     ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max()/1.5)
     ax2.set_xlim(k_perp_plot.min(), k_perp_plot.max()/1.5)
+    plt.savefig(name)
+
+
+def plot_contour(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnuplot'):
+    horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg = limits
+    P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
+    masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
+
+    fig, ax1 = plt.subplots()
+    from matplotlib import ticker
+    c = ax1.contourf(k_perp_plot[:-1], k_parallel_plot, signal, cmap=cmap, norm=LogNorm(), antialiased=True)
+    cbar = fig.colorbar(c, pad=0.13)
+    cbar.ax.set_yscale('log')
+
+    ax2 = ax1.twinx()
+
+    ax1.set_xscale('log')
+    ax1.set_yscale('log')
+    ax2.set_yscale('log')
+    ax1.set_xlabel('$k_\perp [h Mpc^{-1}]$')
+    ax1.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
+    ax2.set_ylabel('Log(Delay) $[ns]$')
+
+    ax1.plot(horizon_limit_x, horizon_limit_y, color='white')
+    ax1.plot(horizon_limit_x, beam_limit_y, color='black')
+    ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='white')
+    ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black')
+    ax1.set_ylim(k_parallel_plot[21:].min(), k_parallel_plot.max())
+    ax2.set_ylim(delay[21:].min() * 1e9, delay.max() * 1e9)
+    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
+    ax2.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
     plt.savefig(name)
 
 
