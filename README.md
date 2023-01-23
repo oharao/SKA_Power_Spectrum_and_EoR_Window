@@ -10,7 +10,7 @@ To run the Square Kilometer Array End-2-End Pipeline for Power Spectrum & EoR an
     - ``/End2End/GLEAM_EGC.fits`` [here](https://drive.google.com/file/d/15oMSprZ0NFO_ttAN6pDsPX--0jn9XJH1/view?usp=sharing)
     - ``70-100MHz_control.vis`` (control visibilities) [here](https://drive.google.com/drive/folders/10JoGY3ugB64NC7LbG3OIxfjRUSkdrRZB?usp=sharing)
     - ``/comoving/70-100MHz`` (21cm signal) [here](https://drive.google.com/drive/folders/1NSy2XSJM4vR3RtV1ku1Gf5xSz7CCSngW?usp=sharing)
-5. Modify the slurm submission script, an example of which may be found [here]()
+5. Modify the slurm submission script, an example of which may be found [here](https://github.com/oharao/SKA_Power_Spectrum_and_EoR_Window/blob/main/Documentation/slurm_ska_pipeline_example.txt)
 
 
 Project File Tree
