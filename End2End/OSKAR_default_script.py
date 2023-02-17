@@ -7,7 +7,19 @@ import math
 
 
 def get_start_time(ra0_deg, length_sec):
-    """Returns optimal start time for field RA and observation length."""
+    """Calculate the optimal start time for a given field RA and observation length.
+
+    Parameters
+    ----------
+    ra0_deg : float
+        The right ascension of the target field, in degrees.
+    length_sec : float
+        The length of the observation, in seconds.
+
+    Returns
+    -------
+    float: The optimal start time for the observation, in UTC format.
+    """
     t = Time('2000-01-01 00:00:00', scale='utc', location=('116.764d', '0d'))
     dt_hours = (24.0 - t.sidereal_time('apparent').hour) / 1.0027379
     dt_hours += (ra0_deg / 15.0)
@@ -16,7 +28,29 @@ def get_start_time(ra0_deg, length_sec):
 
 
 def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False, foregrounds=True, dc_path=None):
-    """Main function."""
+    """Run a simulation of an interferometer telescope with a GLEAM sky model.
+
+    Parameters
+    ----------
+    date : str
+        The date of the observation in 'YYYY-MM-DD' format.
+    min_freq : float
+        The minimum frequency of the observation in GHz.
+    channels : int
+        The number of frequency channels to simulate.
+    channel_bandwidth : float
+        The bandwidth of each frequency channel in GHz.
+    eor : bool, optional
+        Whether to include EoR signal in the simulation (default False).
+    foregrounds : bool, optional
+        Whether to include foregrounds in the simulation (default True).
+    dc_path : str, optional
+        The path to the data cube for the EoR signal (default None).
+
+    Returns
+    -------
+    None
+    """
     import oskar
     # Telescope and observation parameters.
     ra0_deg = 60.0

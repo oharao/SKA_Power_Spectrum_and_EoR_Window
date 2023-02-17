@@ -14,7 +14,36 @@ from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_o
 
 
 def to_hdf5(gains, frequencies, folder):
-    # Write HDF5 file with recognised dataset names.
+    """
+    Write gain model data to an HDF5 file.
+
+    Parameters:
+    -----------
+    gains: numpy.ndarray
+        Array of antenna gain values for each frequency.
+    frequencies: numpy.ndarray
+        Array of frequencies in Hz corresponding to each gain value.
+    folder: str
+        Path to the directory where the HDF5 file will be created.
+
+    Returns:
+    --------
+    None
+
+    Notes:
+    ------
+    The function creates an HDF5 file named "gain_model.h5" in the specified folder and writes two datasets
+    to it: "freq (Hz)" which contains the frequency values in Hz (scaled by 1e9) and "gain_xpol" which contains
+    the gain values for each frequency.
+
+    Example:
+    --------
+    import numpy as np
+    gains = np.array([1.0, 2.0, 3.0])
+    frequencies = np.array([1e9, 2e9, 3e9])
+    folder = "/path/to/directory"
+    to_hdf5(gains, frequencies, folder)
+    """
     with h5py.File(folder + "/gain_model.h5", "w") as hdf_file:
         hdf_file.create_dataset("freq (Hz)", data=frequencies * 1e9)
         hdf_file.create_dataset("gain_xpol", data=gains)
@@ -39,6 +68,56 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        foregrounds=True,
                        delete_vis=False
                        ):
+    """
+    Run an OSKAR pipeline simulation.
+
+    Parameters:
+    -----------
+    max_freq: float, optional
+        Maximum frequency to use for the simulation in GHz (default is 0.1001).
+    min_freq: float, optional
+        Minimum frequency to use for the simulation in GHz (default is 0.070).
+    channel_bandwidth: float, optional
+        Bandwidth of each channel in GHz (default is 0.000012).
+    channels: int, optional
+        Number of channels to use in the simulation (default is 2509).
+    intended_length: float, optional
+        Length of the cable used for the simulation in meters (default is 10.0).
+    length_variation: float, optional
+        Tolerance for the length of the cable used for the simulation as a percentage (default is 0.00).
+    atten_skin_effect: bool, optional
+        Flag indicating whether attenuation due to the skin effect should be considered (default is False).
+    atten_conductivity: bool, optional
+        Flag indicating whether attenuation due to the dielectric conductivity should be considered (default is False).
+    atten_tangent: bool, optional
+        Flag indicating whether attenuation due to the dielectric tangent should be considered (default is False).
+    atten_thermal: bool, optional
+        Flag indicating whether attenuation due to thermal modification of the skin effect should be considered
+        (default is False).
+    base_temperature: float, optional
+        Temperature at which attenuation due to the thermal modification of the skin effect should be computed in
+        Kelvin (default is 298.15).
+    cable_reflections: bool, optional
+        Flag indicating whether cable reflections should be considered (default is False).
+    reflection_order: int, optional
+        Order of reflections to compute if cable_reflections is True (default is 0).
+    z_l: int, optional
+        Load impedance of the cables used for the simulation in ohms (default is 60).
+    dc_path: str, optional
+        Path to directory containing the co-moving Mpc in local observable coordinates (default is '70-100MHz').
+    eor: bool, optional
+        Flag indicating whether to include the 21cm cosmological signal in the simulation (default is False).
+    foregrounds: bool, optional
+        Flag indicating whether to include foregrounds in the simulation (default is True).
+    delete_vis: bool, optional
+        Flag indicating whether to delete the visibilities after the simulation is run (default is False).
+
+    Returns:
+    --------
+    None
+    """
+
+
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S%f')
 

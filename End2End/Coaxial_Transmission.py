@@ -5,8 +5,9 @@ import scipy.constants as const
 
 
 class cable_decay:
-    # this is a description
-
+    """
+    Calculate the skin depth and equivalent area for a coaxial cable given its material properties.
+    """
     def __init__(self, max_freq, min_freq, channels, channel_bandwidth, a, b, c, rho_in, rho_out, mu_in, mu_out,
                  roughness, eps_dielectric, rho_dielectric, mu_dielectric, tan_d, tcr_in, tcr_out, z_l):
         """
@@ -22,11 +23,11 @@ class cable_decay:
         channel_bandwidth: float
             Channel specified bandwidth [Dimensionless].
         a : float
-            Core radius [meters] (See diagram above).
+            Core radius [meters].
         b : float
-            Dielectric radius [meters] (See diagram above).
+            Dielectric radius [meters].
         c : float
-            Shield radius [meters] (See diagram above).
+            Shield radius [meters].
         rho_in : float
             Core resistivity [ohm*meters].
         rho_out : float
@@ -396,9 +397,25 @@ class cable_decay:
 
 
 def equirectangular_approx(lat1, lon1, lat2, lon2):
-    """
-    Calculate the great circle distance between two points
-    on the earth (specified in decimal degrees)
+    """Converts latitude and longitude to polar coordinates using an equirectangular approximation.
+
+    Parameters
+    ----------
+        lat_rel : float
+            Latitude relative to the reference latitude.
+        lon_rel : float
+            Longitude relative to the reference longitude.
+        ref_lat : float
+            Reference latitude in degrees.
+        ref_lon : float
+            Reference longitude in degrees.
+
+    Returns
+    -------
+        rho : float
+            Distance from the reference point in meters.
+        phi : float
+            Angle with respect to the reference point in radians.
     """
     r = 6371 * 10 ** 3  # radius of Earth in Meters
 
@@ -419,12 +436,31 @@ def equirectangular_approx(lat1, lon1, lat2, lon2):
 
 
 def polar_to_cart(rho, phi):  # meters, degrees
+    """Converts polar coordinates to Cartesian coordinates.
+
+    Parameters
+    ----------
+        rho : float
+            Distance from the origin in meters.
+        phi : float
+            Angle with respect to the x-axis in radians.
+
+    Returns
+    -------
+        list: Cartesian coordinates [x, y].
+    """
     x = rho * np.cos(phi)
     y = rho * np.sin(phi)
     return [x, y]
 
 
 def get_antenna_pos():
+    """Returns the positions of the SKA antennas in the reference frame of the SKA core.
+
+    Returns
+    -------
+        pandas.DataFrame: DataFrame containing the station index and the Cartesian coordinates [x, y] of each antenna.
+    """
     centre = [116.7644482, -26.82472208]  # lat , lon
     station_pos = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos_core/layout_wgs84.txt',
                               header=None, names=["latitude", "longitude"])
@@ -449,6 +485,27 @@ def get_antenna_pos():
 
 def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0), octaves=np.random.randint(10, 20),
                      persistence=0.5, lacunarity=2.0):
+    """
+    Generates a 2D Perlin noise map with the specified parameters.
+
+    Parameters:
+    -----------
+    shape : tuple of int, optional
+        The dimensions of the output map as a tuple of (height, width). Default is (1000, 1000).
+    scale : float, optional
+        The scaling factor of the noise function. Higher values result in more fine-grained noise. Default is a random float between 800.0 and 1200.0.
+    octaves : int, optional
+        The number of octaves (iterations) used in the noise generation. Higher values result in more detailed noise. Default is a random integer between 10 and 20.
+    persistence : float, optional
+        The persistence of the noise function. Higher values result in more contrast between high and low values. Default is 0.5.
+    lacunarity : float, optional
+        The lacunarity of the noise function. This parameter controls the increase in frequency between octaves. Default is 2.0.
+
+    Returns:
+    --------
+    world : ndarray of float
+        A 2D numpy array of shape (height, width) containing the generated Perlin noise map.
+    """
     world = np.zeros(shape)
     for i in range(shape[0]):
         for j in range(shape[1]):
@@ -464,6 +521,46 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
 def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
                                atten_skin_effect, atten_conductivity, atten_tangent, atten_thermal, base_temperature,
                                cable_reflections, reflection_order, z_l):
+    """
+    Compute the S21 signal for a radio interferometer system.
+
+    Parameters:
+    -----------
+    max_freq : float
+        The maximum frequency (in MHz) for the S21 signal.
+    min_freq : float
+        The minimum frequency (in MHz) for the S21 signal.
+    channels : int
+        The number of channels used to sample the S21 signal.
+    channel_bandwidth : float
+        The bandwidth (in MHz) of each channel.
+    intended_length : float
+        The intended length (in meters) of the coaxial cable.
+    length_variation : float
+        The relative variation of the cable length, expressed as a standard deviation.
+    atten_skin_effect : bool
+        Whether to include skin effect attenuation in the S21 signal calculation.
+    atten_conductivity : bool
+        Whether to include conductivity attenuation in the S21 signal calculation.
+    atten_tangent : bool
+        Whether to include dielectric tangent attenuation in the S21 signal calculation.
+    atten_thermal : bool
+        Whether to include thermal attenuation in the S21 signal calculation.
+    base_temperature : float
+        The base temperature (in Kelvin) for the S21 signal calculation.
+    cable_reflections : bool
+        Whether to include reflections from the coaxial cable in the S21 signal calculation.
+    reflection_order : int
+        The maximum order of reflections to include in the S21 signal calculation.
+    z_l : complex
+        The load impedance of the S21 signal.
+
+    Returns:
+    --------
+    antenna_info : DataFrame
+        A pandas DataFrame containing information about the antennas in the system, including their positions,
+        cable lengths, delta temperatures, and S21 phasors.
+    """
     antenna_info = get_antenna_pos()
 
     world = perlin_noise_map()

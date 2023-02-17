@@ -1,10 +1,3 @@
-"""
- Ts .mat files --> calculate T21 --> check whether interpolation makes sense
- --> calculate pixel_size, linear interpolate --> store in .FITS format with
- headers
-
-"""
-
 from scipy.io import loadmat
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,12 +6,25 @@ from scipy.integrate import quad
 from scipy import interpolate
 import csv
 
-"""
-converts cubes of Ts to T21 assuming baryon overdensity to be 0 and xHI to be 1
-"""
-
 
 def Ts2T21(data_path, sim_name, redshift):
+    """
+    Converts cubes of Ts to T21 assuming baryon overdensity to be 0 and xHI to be 1.
+
+    Parameters:
+    -----------
+    data_path: str
+        path to directory containing Ts .mat files
+    sim_name: str
+        name of simulation (used to generate filename)
+    redshift: float
+        redshift value of interest
+
+    Returns:
+    --------
+    T21_cube: ndarray
+        Cube of T21 values in mK
+    """
     Ts_filename = 'TsMat_' + str(redshift) + sim_name + '.mat'
 
     Ts_cube_dict = loadmat(data_path + Ts_filename)
@@ -29,18 +35,52 @@ def Ts2T21(data_path, sim_name, redshift):
     return T21_cube
 
 
-# used in find_pix_size
 def chi_integrand(z, omega_m, omega_lambda, omega_r):
+    """
+    Helper function used in find_pix_size to calculate integrand.
+
+    Parameters:
+    -----------
+    z: float
+        Redshift value
+    omega_m: float
+        Density parameter for matter
+    omega_lambda: float
+        Density parameter for dark energy
+    omega_r: float
+        Density parameter for radiation
+
+    Returns:
+    --------
+    integrand: float
+        Value of the integrand at given redshift
+    """
     E_z = np.sqrt(omega_r * (1 + z) ** 4 + omega_m * (1 + z) ** 3 + omega_lambda)
     integrand = 1 / E_z
     return integrand
 
 
-"""calculate pixel size in deg for an array of freqs, then save in csv file
-in data_path"""
-
-
 def find_pix_size(Dc_pix, N_pix, freq_values, data_path):
+    """
+    Calculates pixel size in degrees for an array of frequencies, then saves the results
+    to a csv file in data_path.
+
+    Parameters:
+    -----------
+    Dc_pix: float
+        Physical size of pixel in Mpc/h
+    N_pix: int
+        Number of pixels along each axis of the cube
+    freq_values: ndarray
+        Array of frequency values in MHz
+    data_path: str
+        Path to directory where pixel_size_deg.csv will be saved
+
+    Returns:
+    --------
+    pixel_size_deg: ndarray
+        Array of pixel sizes in degrees for each frequency value
+    """
     z_values = 1420 / freq_values - 1
 
     omega_m = 0.3156
@@ -70,6 +110,38 @@ def find_pix_size(Dc_pix, N_pix, freq_values, data_path):
 # produce a .FITS file with image_data and appropriate headers
 def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg, mean,
                 ra_deg=60.0, dec_deg=-30.0, units="mK"):
+    """
+    Create a FITS file from image data and header information.
+
+    Parameters
+    ----------
+    data_path : str
+        The path to the directory where the FITS file will be saved.
+    image_data : ndarray
+        The 2D image data to be saved in the FITS file.
+    filename : str
+        The name of the FITS file (including the extension).
+    freq : float
+        The frequency of the observation in MHz.
+    N_pix : int
+        The number of pixels per side of the square image.
+    pixel_size_deg : float
+        The size of each pixel in degrees.
+    mean : float
+        The mean value of the image data.
+    ra_deg : float, optional
+        The right ascension of the center of the image in degrees (default is 60.0).
+    dec_deg : float, optional
+        The declination of the center of the image in degrees (default is -30.0).
+    units : str, optional
+        The units of the image data (default is "mK").
+
+    Returns
+    -------
+    None
+        This function does not return anything, but it creates a FITS file in the specified directory.
+
+    """
     hdu = fits.PrimaryHDU()
     header = hdu.header
     header["CTYPE1"] = "RA---SIN"
@@ -90,14 +162,40 @@ def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg, me
     print(mean)
 
 
-"""
-Find T21 at non-integer z values by interpolating. Create .FITS files with
-appropriate headers to capture the data.
-"""
-
-
 def T21_lin_interpolation(T21_slices, ini_z_values, final_freq_values, data_path,
                           N_pix, Dc_pix, channel_bandwidth):
+    """
+    Compute T21 values at non-integer redshifts by interpolating the provided T21 slices
+    at a set of initial redshift values, and create .FITS files with appropriate headers
+    to store the interpolated data.
+
+    Parameters:
+    -----------
+    T21_slices : numpy.ndarray
+        A 3D numpy array containing the T21 brightness temperature slices at different
+        redshift values.
+    ini_z_values : numpy.ndarray
+        A 1D numpy array containing the redshift values at which the T21 slices were
+        computed.
+    final_freq_values : numpy.ndarray
+        A 1D numpy array containing the frequencies (in MHz) at which the T21 values
+        are desired to be interpolated.
+    data_path : str
+        The directory path where the .FITS files will be saved.
+    N_pix : int
+        The number of pixels in each dimension of the output .FITS images.
+    Dc_pix : float
+        The pixel size in comoving distance (in Mpc/h).
+    channel_bandwidth : float
+        The bandwidth (in MHz) of each frequency channel.
+
+    Returns:
+    --------
+    data_interpolate_z : numpy.ndarray
+        A 3D numpy array containing the interpolated T21 values at each desired
+        frequency value.
+    """
+
     N_ini = len(ini_z_values)
     if N_ini < 2:
         print('Error: Insufficient data to perform interpolation.')
@@ -130,32 +228,54 @@ def T21_lin_interpolation(T21_slices, ini_z_values, final_freq_values, data_path
     return data_interpolate_z
 
 
-# gets Dc and deltaDc which is used for part2
-# returns in Mpc/h
 def get_los_comoving_distances(freq_values, freq_sides, data_path):
+    """
+    Computes the line-of-sight comoving distances and the differences in comoving distance across frequency channels
+    for given frequency values and frequency channel sides.
+
+    Parameters:
+    -----------
+    freq_values : numpy array
+        An array of the central frequency values of the frequency channels.
+    freq_sides : numpy array
+        An array of the frequency channel edges.
+    data_path : str
+        The path to the directory where the output files will be saved.
+
+    Returns:
+    --------
+    Dc : numpy array
+        An array of the line-of-sight comoving distances for each of the central frequency values in Mpc/h units.
+    delta_Dc : numpy array
+        An array of the differences in line-of-sight comoving distances across frequency channels in Mpc/h units.
+    """
+
+    # Calculate redshift values from given frequency values
     z_values = 1420 / freq_values - 1
     z_sides = 1420 / freq_sides - 1
 
+    # Cosmological parameters
     omega_m = 0.3156
     omega_lambda = 0.6844
     omega_r = 8e-5
     h = 0.6727  # dimensionless Hubble constant
     Dh = 3000  # in Mpc/h, Hubble distance
 
-    # los comoving distance
-    Dc = np.zeros(len(z_values))  # initialising
+    # Calculate line-of-sight comoving distances for each central frequency value
+    Dc = np.zeros(len(z_values))  # initialize array
     for j in range(len(z_values)):
         [integral, error] = quad(chi_integrand, 0, z_values[j], args=(omega_m, omega_lambda, omega_r))
         Dc_value = Dh * integral
         Dc[j] = Dc_value
 
+    # Save line-of-sight comoving distances to a file
     with open(data_path + 'los_comoving_distance.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(freq_values)
         writer.writerow(Dc)
 
-    # delta los comoving distance across freq channel
-    store_Dc = np.zeros(len(z_sides))  # initialising
+    # Calculate differences in line-of-sight comoving distances across frequency channels
+    store_Dc = np.zeros(len(z_sides))  # initialize array
     for j in range(len(z_sides)):
         [integral, error] = quad(chi_integrand, 0, z_sides[j], args=(omega_m, omega_lambda, omega_r))
         Dc_value = Dh * integral
@@ -163,6 +283,7 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
     delta_Dc = store_Dc[0:-2] - store_Dc[1:-1]
 
+    # Save differences in line-of-sight comoving distances to a file
     with open(data_path + 'delta_los_comoving_distance.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(freq_sides)
@@ -172,6 +293,11 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
 
 
 def main():
+    """
+    This is the main function for a script. It executes several functions and operations to extract the 21cm signal
+    from a data cube and interpolate it at a range of frequencies. It then computes the line-of-sight comoving distance
+    and stores the results in files. The function also generates a plot for a quick sanity check on the interpolation.
+    """
     # ----------------------------------------------------------------------------#
     data_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/test/'
     sim_name = ''
@@ -221,9 +347,11 @@ def main():
     plt.savefig("redshift_interpolation.png")
     # input('If the linear interpolation in z looks good, press enter to continue.')
 
+    # Interpolate the 21cm signal at the range of frequencies
     data_interpolate_z = T21_lin_interpolation(T21_slices, z_values, freq_values, data_path,
                                                N_pix, Dc_pix, channel_bandwidth)
 
+    # Compute the line-of-sight comoving distance and store the results in files
     get_los_comoving_distances(freq_values, freq_sides, data_path)
 
 
