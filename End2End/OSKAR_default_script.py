@@ -1,9 +1,10 @@
-from astropy.io import fits
-from astropy.time import Time, TimeDelta
-import numpy
-import os
-import csv
 import math
+import os
+
+from astropy.time import Time, TimeDelta
+
+from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import get_cosmological_model, get_pixel_size
+from SKA_Power_Spectrum_and_EoR_Window.sky_map.gsm_gleam import composite_map
 
 
 def get_start_time(ra0_deg, length_sec):
@@ -60,21 +61,6 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False
     frequency_inc_hz = channel_bandwidth * 1e9
     num_channels = channels
 
-    # Load sky model from GLEAM FITS binary table.
-    data = fits.getdata("SKA_Power_Spectrum_and_EoR_Window/End2End/GLEAM_EGC.fits", 1)
-    flux = data["int_flux_076"]
-    alpha = data["alpha"]
-    flux = numpy.nan_to_num(flux)
-    alpha = numpy.nan_to_num(alpha)
-    zeros = numpy.zeros_like(flux)
-    ref_freq = 76e6 * numpy.ones_like(flux)
-    sky_array = numpy.column_stack(
-        (data["RAJ2000"], data["DEJ2000"],
-         flux, zeros, zeros, zeros, ref_freq, alpha))
-
-    # Create the sky model.
-    sky_gleam = oskar.Sky.from_array(sky_array)
-
     # Create directory to write OSKAR visibilities.
     os.mkdir(date + '_vis/')
 
@@ -85,9 +71,11 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False
         freq_name = "freq_%.3f_MHz" % (frequency_hz / 1e6)
         root_name = "gleam_all_%s" % freq_name
 
+        composite_sky_model = composite_map(date, frequency_hz, dc_path, eor, foregrounds)
+
         # Run simulation.
         params = {
-            "simulator/max_sources_per_chunk": 20000,
+            "simulator/max_sources_per_chunk": 500000,
             "simulator/write_status_to_log_file": True,
             "sky/common_flux_filter/flux_min": -1e10,
             "sky/common_flux_filter/flux_max": 1e10,
@@ -108,33 +96,11 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False
             "interferometer/time_average_sec": 0.9,
         }
 
-        composite_sky_model = sky_gleam.create_copy()
+        cosmo = get_cosmological_model()
+        pixel_size_deg = get_pixel_size(z=(1420.0e6 / (frequency_hz / 1e6) - 1), model=cosmo).value
 
-        if eor is True:
-            root_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path
-
-            eor_file = root_path + '/' + freq_name + '_interpolate_T21_slices.fits'
-            sky_eor = oskar.Sky.from_fits_file(
-                eor_file,
-                min_peak_fraction=-1e6,
-                min_abs_val=-1e6,
-                frequency_hz=frequency_hz
-            )
-            if foregrounds is True:
-                composite_sky_model.append(sky_eor)
-            else:
-                composite_sky_model = sky_eor.create_copy()
-
-            pixel_size_path = root_path + '/pixel_size_deg.csv'
-
-            with open(pixel_size_path, 'r') as file:
-                reader = csv.reader(file)
-                data = list(reader)
-                freq_index = data[0].index('%s' % float("%.3f" % (frequency_hz / 1e6)))
-                pixel_size_deg = data[1][freq_index]
-
-            params["interferometer/uv_filter_min"] = 1.0 / math.radians(float(pixel_size_deg)*256)
-            params["interferometer/uv_filter_max"] = 1.0 / (2.0*math.radians(float(pixel_size_deg)))
+        params["interferometer/uv_filter_min"] = 1.0 / math.radians(float(pixel_size_deg) * 512)
+        params["interferometer/uv_filter_max"] = 1.0 / (2.0 * math.radians(float(pixel_size_deg)))
 
         settings_sim = oskar.SettingsTree("oskar_sim_interferometer")
         settings_sim.from_dict(params)

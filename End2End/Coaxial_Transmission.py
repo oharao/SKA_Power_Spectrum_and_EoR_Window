@@ -6,53 +6,39 @@ import scipy.constants as const
 
 class cable_decay:
     """
-    Calculate the skin depth and equivalent area for a coaxial cable given its material properties.
+    The electromagnetic properties of a Coaxial transmission line may be analytically computed using the second order closed
+    form differential Telegrapher's equations given the cable structure and composite material bulk parameters.
+
+    This Class calculates these properties and S21 parameters as a function of length & temperture.
     """
+
     def __init__(self, max_freq, min_freq, channels, channel_bandwidth, a, b, c, rho_in, rho_out, mu_in, mu_out,
-                 roughness, eps_dielectric, rho_dielectric, mu_dielectric, tan_d, tcr_in, tcr_out, z_l):
+                 roughness, eps_dielectric, rho_dielectric, mu_dielectric, tcr_in, tcr_out, z_l, z_s):
         """
-        Calculate the skin depth for a material given the associated properties.
-        Parameters
-        ----------
-        max_freq : float
-            Maximum frequency range of S_21 calculation [GHz].
-        min_freq : float
-            Minimum frequency range of S_21 calculation [GHz].
-        channels : int
-            Number of channels across specified bandwidth [Dimensionless].
-        channel_bandwidth: float
-            Channel specified bandwidth [Dimensionless].
-        a : float
-            Core radius [meters].
-        b : float
-            Dielectric radius [meters].
-        c : float
-            Shield radius [meters].
-        rho_in : float
-            Core resistivity [ohm*meters].
-        rho_out : float
-            Shield resistivity [ohm*meters].
-        mu_in : float
-            Core relative permeability [dimensionless].
-        mu_out : float
-            Shield relative permeability [dimensionless].
-        roughness : float
-            Surface roughness [meters].
-        eps_dielectric : float
-            Dielectric relative permativity [dimensionless].
-        rho_dielectric : float
-            Dielectric resistivity [ohm*meters].
-        mu_dielectric : float
-            Dielectric relative permeability [dimensionless].
-        tan_d : float
-            Dielectric loss tangent [dimensionless].
-        tcr_in : float
-            Core tempeture Coeficient of Resistance [dimensionless].
-        tcr_out : float
-            Shield tempeture Coeficient of Resistance [dimensionless].
-        z_l : float
-            Load impedence [ohms].
+        Initializes the cable_decay class.
+
+        Parameters:
+            - max_freq (float): Maximum frequency (GHz) for which the electrical properties should be calculated.
+            - min_freq (float): Minimum frequency (GHz) for which the electrical properties should be calculated.
+            - channels (int): Number of channels in the bandwidth.
+            - channel_bandwidth (float): Bandwidth (GHz) per channel.
+            - a (float): Inner conductor radius (mm).
+            - b (float): Outer conductor radius (mm).
+            - c (float): Dielectric radius (mm).
+            - rho_in (float): Inner conductor resistivity (Ohm.m).
+            - rho_out (float): Outer conductor resistivity (Ohm.m).
+            - mu_in (float): Inner conductor permeability (H/m).
+            - mu_out (float): Outer conductor permeability (H/m).
+            - roughness (float): Inner conductor surface roughness (microns).
+            - eps_dielectric (float): Dielectric permittivity (F/m).
+            - rho_dielectric (float): Dielectric resistivity (Ohm.m).
+            - mu_dielectric (float): Dielectric permeability (H/m).
+            - tcr_in (float): Temperature coefficient of resistance for the inner conductor.
+            - tcr_out (float): Temperature coefficient of resistance for the outer conductor.
+            - z_l (complex): Load impedance (Ohm).
+            - z_s (complex): Source impedance (Ohm).
         """
+
         self.max_freq = max_freq * 10 ** 9  # Convert GHz to Hz.
         self.min_freq = min_freq * 10 ** 9  # Convert GHz to Hz.
         self.channels = channels
@@ -62,338 +48,269 @@ class cable_decay:
         self.c = c
         self.rho_in = rho_in
         self.rho_out = rho_out
-        self.mu_in = mu_in * 4 * np.pi * 10 ** -7  # Convert to core permeability.
-        self.mu_out = mu_out * 4 * np.pi * 10 ** -7  # Convert to shield permeability.
+        self.mu_in = mu_in * const.mu_0  # Convert to core permeability.
+        self.mu_out = mu_out * const.mu_0  # Convert to shield permeability.
         self.roughness = roughness
-        self.eps_dielectric = eps_dielectric
+        self.eps_dielectric = eps_dielectric * const.epsilon_0
         self.rho_dielectric = rho_dielectric
-        self.mu_dielectric = mu_dielectric
-        self.tan_d = tan_d
+        self.mu_dielectric = mu_dielectric * const.mu_0
 
-        # Tempeture Coeficient of Resistance:
+        # Tempeture Coeficient of Resistance @ 20 degrees Celcius:
         # https://www.allaboutcircuits.com/textbook/direct-current/chpt-12/temperature-coefficient-resistance/
         self.tcr_in = tcr_in
         self.tcr_out = tcr_out
 
         self.z_l = z_l
+        self.z_s = z_s
 
         # Create all frequency & wavelengths for calculations.
         self.frequencies = np.arange(self.min_freq, self.max_freq, self.channel_bandwidth)  # Hz.
         self.wavelengths = const.speed_of_light / self.frequencies  # meters.
+        self.angular_frequencies = 2 * np.pi * self.frequencies
 
-    def skin_depth(self, frequency, mu, rho):
-        """
-        Calculate the skin depth for a material given the associated properties.
-        Parameters
-        ----------
-        frequency : np.array
-            Frequency [meters].
-        mu : float
-            Pearmeability [meters].
-        rho : float
-            Resistivity [meters].
+        self.get_capacitance()
+        self.get_inductance()
+        self.get_conductance()
 
-        Returns
-        -------
-        delta : float
-            Skin depth
+    def get_capacitance(self):
         """
-        self.delta = np.sqrt(rho / (np.pi * frequency * mu))
-        return self.delta
+        Calculate the capacitance of a cylindrical capacitor based on the given parameters.
 
-    def skin_depth_out(self):
-        """
-        Calculate the skin depth for coax shielding given the associated properties.
-        Returns
-        -------
-        delta : float
-            Outer shield skin depth [meters].
-        """
-        self.delta_out = self.skin_depth(self.frequencies, self.mu_out, self.rho_out)
-        return self.delta_out
+        Returns:
+        capacitance (float): The capacitance of the cylindrical capacitor.
 
-    def skin_depth_in(self):
+        Parameters:
+        self (object): The object representing the cylindrical capacitor.
+        self.eps_dielectric (float): The dielectric constant of the material between the two cylinders.
+        self.a (float): The radius of the inner cylinder.
+        self.b (float): The radius of the outer cylinder.
         """
-        Calculate the skin depth for coax core given the associated properties.
-        Returns
-        -------
-        delta : float
-            Inner core skin depth [meters].
-        """
-        self.delta_in = self.skin_depth(self.frequencies, self.mu_in, self.rho_in)
-        return self.delta_in
+        self.capacitance = (2 * np.pi * self.eps_dielectric) / np.log(self.b / self.a)
+        return self.capacitance
 
-    def inner_conductor_equivalent_area(self):
+    def get_inductance(self):
         """
-        Calculate the coax cable sheilding equivalent area.
-        Returns
-        -------
-        core_area : float
-            Coax cable core equivalent area [meters**2]
-        """
-        self.core_area = 2 * np.pi * self.delta_out * (self.a + self.delta_in * (np.exp(-self.a / self.delta_in) - 1))
-        return self.core_area
+        Calculate the inductance of a cylindrical inductor based on the given parameters.
 
-    def outer_conductor_equivalent_area(self):
-        """
-        Calculate the coax cable sheilding equivalent area.
-        Returns
-        -------
-        shield_area : float
-            Coax cable core equivalent area [meters**2]
-        """
+        Returns:
+        inductance (float): The inductance of the cylindrical inductor.
 
-        self.shield_area = 2 * np.pi * self.delta_out * (
-                self.b + self.delta_out - (self.c + self.delta_out) * np.exp((self.b - self.c) / self.delta_out))
-        return self.shield_area
+        Parameters:
+        self (object): The object representing the cylindrical inductor.
+        self.mu_dielectric (float): The permeability of the material inside the cylinder.
+        self.a (float): The radius of the inner cylinder.
+        self.b (float): The radius of the outer cylinder.
+        """
+        self.inductance = (self.mu_dielectric) / (2 * np.pi) * np.log(self.b / self.a)
+        return self.inductance
 
-    def surface_roughness_coeff(self):
+    def get_conductance(self):
         """
-        Calculate the surface roughness coefficient as a percentage.
-        Returns
-        -------
-        k_sr : float
-            Surface roughness coefficent [%].
+        Calculate the conductance of a cylindrical conductor based on the given parameters.
+
+        Returns:
+        conductance (float): The conductance of the cylindrical conductor.
+
+        Parameters:
+        self (object): The object representing the cylindrical conductor.
+        self.rho_dielectric (float): The resistivity of the material inside the cylinder.
+        self.a (float): The radius of the inner cylinder.
+        self.b (float): The radius of the outer cylinder.
         """
-        self.k_sr_in = 1 + (2 / np.pi) * np.arctan(1.4 * (self.roughness / self.delta_in) ** 2)
-        self.k_sr_out = 1 + (2 / np.pi) * np.arctan(1.4 * (self.roughness / self.delta_out) ** 2)
-        return self.k_sr_in, self.k_sr_out
+        self.conductance = (2 * np.pi / self.rho_dielectric) / np.log(self.b / self.a)
+        return self.conductance
+
+    def get_resistance(self, temp):
+        """
+        Calculate the resistance of a cylindrical transmission line based on the given parameters and temperature.
+
+        Returns:
+        resistance (float): The resistance of the cylindrical transmission line.
+
+        Parameters:
+        self (object): The object representing the cylindrical transmission line.
+        temp (float): The temperature of the transmission line in Kelvin.
+        self.rho_in (float): The resistivity of the inner conductor.
+        self.rho_out (float): The resistivity of the outer conductor.
+        self.tcr_in (float): The temperature coefficient of resistance for the inner conductor.
+        self.tcr_out (float): The temperature coefficient of resistance for the outer conductor.
+        self.a (float): The radius of the inner conductor.
+        self.b (float): The radius of the outer conductor.
+        self.angular_frequencies (float): The angular frequency of the transmission line in radians per second.
+        self.mu_in (float): The permeability of the material inside the inner conductor.
+        self.mu_out (float): The permeability of the material between the inner and outer conductors.
+        """
+        delta_in = np.sqrt(2 * self.rho_in / (self.angular_frequencies * self.mu_in))
+        delta_out = np.sqrt(2 * self.rho_out / (self.angular_frequencies * self.mu_out))
+
+        self.resistance = 1 / (2 * np.pi) * (self.rho_in * (1 + self.tcr_in * (temp - 293.15)) / (delta_in * self.a) +
+                                             self.rho_out * (1 + self.tcr_out * (temp - 293.15)) / (delta_out * self.b))
+        return self.resistance
+
+    def propagation_const(self):
+        """
+        Calculate the propagation constant, phase constant, and attenuation constant of a cylindrical transmission line.
+
+        Returns:
+        phase_const (float): The phase constant of the transmission line.
+        attenuation (float): The attenuation constant of the transmission line.
+
+        Parameters:
+        self (object): The object representing the cylindrical transmission line.
+        """
+        self.gamma = np.sqrt((self.resistance + 1j * self.angular_frequencies * self.inductance) * (
+                self.conductance + 1j * self.angular_frequencies * self.capacitance))
+        self.phase_const = self.gamma.imag
+        self.attenuation = self.gamma.real
+        return self.phase_const
 
     def coax_impedence(self):
         """
-        Use coax equation to calculate the impedence, given donut dimensions and properties.
-        Returns
-        -------
-        z_naught : float
-            Impedance [ohms].
-        """
-        self.z_0 = (60 / self.eps_dielectric ** 0.5) * np.log(self.b / self.a)
+        Calculate the characteristic impedance of a coaxial transmission line.
 
+        Returns:
+        z_0 (float): The characteristic impedance of the coaxial transmission line.
+
+        Parameters:
+        self (object): The object representing the coaxial transmission line.
+        self.resistance (float): The resistance of the transmission line.
+        self.inductance (float): The inductance of the transmission line.
+        self.conductance (float): The conductance of the transmission line.
+        self.capacitance (float): The capacitance of the transmission line.
+        self.angular_frequencies (float): The angular frequency of the transmission line in radians per second.
+        """
+        self.z_0 = np.sqrt((self.resistance + 1j * self.angular_frequencies * self.inductance) / (
+                self.conductance + 1j * self.angular_frequencies * self.capacitance))
         return self.z_0
 
-    def loss_skin_effect(self):
+    def get_refl_l(self):
         """
-        Calculate losses associated with the skin effect on the coaxial cable [dB/m].
-        Returns
-        -------
-        loss_delta : np.array(float)
-            Loss due to skin effect [dB/m].
-        """
-        self.loss_delta_in = 8.68588 * (self.rho_in / self.core_area * self.k_sr_in) / (2 * self.z_0)
-        self.loss_delta_out = 8.68588 * (self.rho_out / self.shield_area * self.k_sr_out) / (2 * self.z_0)
-        self.loss_delta = self.loss_delta_in + self.loss_delta_out
-        return self.loss_delta
+        Calculate the reflection coefficient of the load connected to a transmission line.
 
-    def loss_conductivity(self):
-        """
-        Loss due to conduction in coax dielectric: the only loss mechanism independent of frequency and geometry.
-        Returns
-        -------
-        loss_sigma : np.array(float)
-            Loss due to dielectric conductivity [dB/m].
-        """
-        loss_mhos_per_m = 2 * np.pi / self.rho_dielectric / np.log(self.b / self.a)
-        self.loss_sigma = (8.686 * loss_mhos_per_m * self.z_0 / 2) * np.ones(np.shape(self.frequencies))
-        return self.loss_sigma
+        Returns:
+        refl_l (float): The reflection coefficient of the load.
 
-    def loss_dielectric_tangent(self):
+        Parameters:
+        self (object): The object representing the transmission line.
+        self.z_l (float): The impedance of the load.
+        self.z_0 (float): The characteristic impedance of the transmission line.
         """
-        Loss tangent is the ratio at any specified frequency between the real and imaginary parts of the impedance of the capacitor. A large loss tangent refers to a high degree of dielectric absorption.
-        Returns
-        -------
-        loss_tangent : np.array(float)
-            Loss due to dielectric absorption [dB/m].
-        """
-        self.loss_tangent = 27.28753 * np.sqrt(self.eps_dielectric) * self.tan_d * self.frequencies / (const.c)
-        return self.loss_tangent
+        self.refl_l = (self.z_l - self.z_0) / (self.z_l + self.z_0)
+        return self.refl_l
 
-    def loss_thermal(self, temperature):
+    def get_refl_s(self):
         """
-        The resistance of the cable depends on the operating temperature and thus introdduces another source of loss.
-        Parameters
-        ----------
-        temperature : float
-            Temperture of cable operation [Kelvin].
+        Calculate the reflection coefficient of the source connected to a transmission line.
 
-        Returns
-        -------
-        self.loss_temp : np.array(float)
-            Loss due to temperature dependence of resistance [dB/m].
+        Returns:
+        refl_s (float): The reflection coefficient of the source.
+
+        Parameters:
+        self (object): The object representing the transmission line.
+        self.z_s (float): The impedance of the source.
+        self.z_0 (float): The characteristic impedance of the transmission line.
         """
-        temp_in_celcius = temperature - 273.15
-        self.loss_temp = self.loss_delta_in * (1 + self.tcr_in * (temp_in_celcius - 25)) + self.loss_delta_out * (
-                1 + self.tcr_out * (temp_in_celcius - 25))
-        return self.loss_temp
+        self.refl_s = (self.z_s - self.z_0) / (self.z_s + self.z_0)
+        return self.refl_s
 
-    def cable_reflection_coefficient(self):
+    def refl(self, length, z=0):
         """
-        Calculate the reflection coefficient: describes percentage of wave reflected by an impedance discontinuity/mismatch in the transmission medium.
-        Returns
-        -------
-        self.reflection_coeff : float
-            Reflection coefficiente [dimensionless].
+        Calculates the reflection coefficient for a transmission line of a given length.
+
+        Parameters:
+        -----------
+        length: float
+            Length of the transmission line.
+
+        Returns:
+        --------
+        float
+            The reflection coefficient for the given transmission line length.
         """
-        self.reflection_coeff = (self.z_l - self.z_0) / (self.z_l + self.z_0)
-        return self.reflection_coeff
+        return self.refl_l * np.exp(2 * self.gamma * (z - length))
 
-    def atennuate(self, length, temperature, incl_delta=True, incl_sigma=True, incl_tangent=True,
-                  incl_thermal=True):
+    def z_input(self, length, z=0):
         """
-        Apply selected (Skin depth effect, conductivity, tangent & thermal) attenuation to an input signal.
-        Parameters
-        ----------
-        length : float
-            Cable length [meters].
-        temperature : float
-            Temperture of cable operation [Kelvin].
-        incl_delta : <class 'bool'>
-            Include skin effect losses.
-        incl_sigma : <class 'bool'>
-            Include conductivity effect losses.
-        incl_tangent : <class 'bool'>
-            Include tangent effect losses.
-        incl_thermal : <class 'bool'>
-            Include thermal effect losses.
+        Calculates the input impedance of the transmission line at a given length.
 
-        Returns
-        -------
-        attenuated_signal : float
-            Input signal after various attenuation effects have been applied [dimensionless].
+        Parameters:
+        -----------
+        length: float
+            Length of the transmission line.
+
+        Returns:
+        --------
+        complex
+            The input impedance of the transmission line at the given length.
         """
-        attenuation = 0.01
+        self.z_in = self.z_0 * np.divide(self.z_l + self.z_0 * np.tan(self.gamma * (length - z)),
+                                         self.z_0 + self.z_l * np.tan(self.gamma * (length - z)))
+        return self.z_in
 
-        if incl_delta is True and incl_thermal is False:
-            attenuation += self.loss_delta
-        if incl_sigma is True:
-            attenuation += self.loss_sigma
-        if incl_tangent is True:
-            attenuation += self.loss_tangent
-        if incl_thermal is True:
-            attenuation += self.loss_thermal(temperature)
+    def V_0_p(self, length, V_g=complex(1 + 0j)):
+        """
+        Calculates the voltage at the load end of the transmission line for a given input voltage and line length.
 
-        if incl_delta is False and incl_sigma is False and incl_tangent is False and incl_thermal is False:
-            return np.ones(np.shape(self.frequencies))
+        Parameters:
+        -----------
+        length: float
+            Length of the transmission line.
+        V_g: complex, optional (default = 1+0j)
+            The input voltage of the transmission line. If not specified, a default value of 1+0j is used.
+
+        Returns:
+        --------
+        complex
+            The voltage at the load end of the transmission line for the given input voltage and line length.
+        """
+        return V_g * np.exp(-self.gamma * length) * self.z_0 / (
+                self.z_0 * (1 + self.refl(length)) + self.z_s * (1 - self.refl(length)))
+
+    def V_p(self, length, z=0, atten_bead=0.0):
+        """
+        Calculates the voltage at the end of a coaxial cable of a given length with an optional attenuation value.
+
+        Args:
+        length (float): The length of the cable in meters.
+        n (int, optional): The number of reflections to consider. Defaults to 3.
+        atten_bead (float, optional): The attenuation value in dB. Defaults to 0.0.
+
+        Returns:
+        complex: The voltage at the end of the cable.
+        """
+        # atten_bead is the power gain in db ie. 10 Log(k) where k is a percentage.
+        power_gain = 10 ** (atten_bead / 10)
+
+        output = self.V_0_p(length) * np.exp(-self.gamma * z) * (1 - self.refl_l)
+        return output * 1 / (self.z_0 / (self.z_0 + self.z_l)) * power_gain
+
+    def get_S21(self, length, temp=293.15, atten_bead=0.0, cable_reflections=True):
+        """
+        Calculates the S21 response for a given coaxial cable length, temperature, number of reflections, and attenuation value.
+
+        Args:
+        length (float): The length of the cable in meters.
+        temp (float, optional): The temperature in Kelvin. Defaults to 293.15.
+        n (int, optional): The number of reflections to consider. Defaults to 10.
+        atten_bead (float, optional): The attenuation value in dB. Defaults to 0.0.
+        cable_reflections (bool, optional): Whether or not to include reflections in the cable. Defaults to True.
+
+        Returns:
+        complex: The S21 response.
+        """
+        if cable_reflections is True:
+            self.get_resistance(temp)
+            self.coax_impedence()
+            self.propagation_const()
+            self.get_refl_l()
+            self.get_refl_s()
+
+            self.z_input(length)
+            self.V_0_p(length)
+
+            return self.V_p(length, atten_bead)
         else:
-            return 10 ** (-(attenuation / 18.8) * length)
-
-    def cable_reflections(self, length, temperature, reflection_no, incl_delta=True, incl_sigma=True, incl_tangent=True,
-                          incl_thermal=True):
-        """
-        Generate superposition of s_21 cable reflections for a given cable length, temperture and reflection order.
-        Parameters
-        ----------
-        length : float
-            Cable length [meters].
-        temperature : float
-            Temperture of cable operation [Kelvin].
-        reflection_no : int
-            Number of reflections orders to be included [dimensionless].
-        incl_delta : <class 'bool'>
-            Include skin effect losses.
-        incl_sigma : <class 'bool'>
-            Include conductivity effect losses.
-        incl_tangent : <class 'bool'>
-            Include tangent effect losses.
-        incl_thermal : <class 'bool'>
-            Include thermal effect losses.
-
-        Returns
-        -------
-        s_21 : np.array(complex)
-            Generated S_21 contribution due to nth order cable reflection.
-        """
-
-        v_g = const.c / (2*np.sqrt(self.eps_dielectric * self.mu_dielectric))  # m/s
-
-        optical_length = np.abs(1 + 2 * reflection_no) * length
-
-        delay = float((optical_length - length) / v_g)
-
-        omega = 2 * np.pi * self.frequencies
-
-        A = (self.reflection_coeff ** (2 * reflection_no)) * self.atennuate(optical_length, temperature,
-                                                                            incl_delta=incl_delta,
-                                                                            incl_sigma=incl_sigma,
-                                                                            incl_tangent=incl_tangent,
-                                                                            incl_thermal=incl_thermal)
-        return np.array([A[i] * complex(np.cos(omega[i] * delay),
-                                        np.sin(omega[i] * delay)) for i in range(len(self.frequencies))])
-
-    def to_real_imag(self, amp_phase):
-        """
-        Convert to real and imaginary components, assuming phases are in degrees.
-        Parameters
-        ----------
-        amp_phase : np.array(complex)
-            Input amplitudes & phases [dimensionless].
-
-        Returns
-        -------
-        real_imag : np.array(complex)
-            Real & imaginary components in rectangular complex form.
-        """
-        amp, phase = amp_phase.real, amp_phase.imag
-
-        real_imag = amp * np.exp(1j * phase)
-        return complex(np.real(real_imag), np.imag(real_imag))
-
-    def to_amp_phase(self, real_imag):
-        """
-        Convert to amp and phase components, phases are in degrees.
-        Parameters
-        ----------
-        real_imag : np.array(complex)
-            Input real & imaginary components [dimensionless].
-
-        Returns
-        -------
-        amp_phase ; np.array(complex)
-            Amp & phase components in complex form.
-        """
-        return complex(np.abs(real_imag), np.angle(real_imag))
-
-    def loss_with_length_freq(self, length, temperature, reflection_no, incl_delta=True, incl_sigma=True,
-                              incl_tangent=True, incl_thermal=True, incl_reflections=True):
-        """
-        Apply selected (Skin depth effect, conductivity, tangent & thermal) attenuation to an input signal.
-        Parameters
-        ----------
-        length : float
-            Cable length [meters].
-        temperature : float
-            Temperture of cable operation [Kelvin].
-        reflection_no : int
-            Number of reflections orders to be included [dimensionless].
-        incl_delta : <class 'bool'>
-            Include skin effect losses.
-        incl_sigma : <class 'bool'>
-            Include conductivity effect losses.
-        incl_tangent : <class 'bool'>
-            Include tangent effect losses.
-        incl_thermal : <class 'bool'>
-            Include thermal effect losses.
-        incl_reflections : <class 'bool'>
-            Include cable reflections effect.
-
-        Returns
-        -------
-        s_21: np.array(complex)
-            Generated s21 for the given input parameters.
-        """
-        signal = complex(1, 0) * self.atennuate(length, temperature, incl_delta=incl_delta, incl_sigma=incl_sigma,
-                                                incl_tangent=incl_tangent, incl_thermal=incl_thermal)
-        self.cable_reflection_coefficient()
-
-        if incl_reflections is True:
-            if reflection_no != 0:
-                for i in range(reflection_no):
-                    reflected_signal = self.cable_reflections(length=length, temperature=temperature,
-                                                              reflection_no=i + 1, incl_delta=incl_delta,
-                                                              incl_sigma=incl_sigma, incl_tangent=incl_tangent,
-                                                              incl_thermal=incl_thermal)
-                    signal += reflected_signal
-                return signal
-        return signal * np.ones(np.shape(self.frequencies))
+            return np.zeros_like(self.frequencies) + complex(1, 0) * 10 ** (atten_bead / 10)
 
 
 def equirectangular_approx(lat1, lon1, lat2, lon2):
@@ -519,8 +436,7 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
 
 
 def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
-                               atten_skin_effect, atten_conductivity, atten_tangent, atten_thermal, base_temperature,
-                               cable_reflections, reflection_order, z_l):
+                               const_atten, base_temperature, temp_variation, cable_reflections, z_l, z_s):
     """
     Compute the S21 signal for a radio interferometer system.
 
@@ -538,22 +454,14 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
         The intended length (in meters) of the coaxial cable.
     length_variation : float
         The relative variation of the cable length, expressed as a standard deviation.
-    atten_skin_effect : bool
-        Whether to include skin effect attenuation in the S21 signal calculation.
-    atten_conductivity : bool
-        Whether to include conductivity attenuation in the S21 signal calculation.
-    atten_tangent : bool
-        Whether to include dielectric tangent attenuation in the S21 signal calculation.
-    atten_thermal : bool
-        Whether to include thermal attenuation in the S21 signal calculation.
     base_temperature : float
         The base temperature (in Kelvin) for the S21 signal calculation.
     cable_reflections : bool
         Whether to include reflections from the coaxial cable in the S21 signal calculation.
-    reflection_order : int
-        The maximum order of reflections to include in the S21 signal calculation.
     z_l : complex
         The load impedance of the S21 signal.
+    z_s : complex
+        The generator impedance of the S21 signal.
 
     Returns:
     --------
@@ -563,23 +471,13 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
     """
     antenna_info = get_antenna_pos()
 
-    world = perlin_noise_map()
+    world = perlin_noise_map() * temp_variation
 
     # Initalise an RG58 Coaxial Cable across the 1480 channels spaning freq bandwidth [72.0, 108.975]MHz.
     ska = cable_decay(max_freq=max_freq, min_freq=min_freq, channels=channels, channel_bandwidth=channel_bandwidth,
                       a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.71e-8, rho_out=1.71e-8,
                       mu_in=1.0, mu_out=1.0, roughness=0.0, eps_dielectric=2.12, rho_dielectric=1e18,
-                      mu_dielectric=1, tan_d=1e-5, tcr_in=0.00404, tcr_out=0.00404, z_l=z_l)
-
-    ska.skin_depth_in()
-    ska.skin_depth_out()
-    ska.inner_conductor_equivalent_area()
-    ska.outer_conductor_equivalent_area()
-    ska.surface_roughness_coeff()
-    ska.coax_impedence()
-    ska.loss_skin_effect()
-    ska.loss_conductivity()
-    ska.loss_dielectric_tangent()
+                      mu_dielectric=1, tcr_in=0.00404, tcr_out=0.00404, z_l=z_l, z_s=z_s)
 
     antenna_info['cable_length'] = np.random.normal(intended_length, intended_length * length_variation,
                                                     len(antenna_info.index))
@@ -588,10 +486,7 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
     antenna_info['delta_t'] = [base_temperature + world[round((x / 40000) * shape[0] / 2 + shape[0] / 2)][
         round((y / 40000) * shape[1] / 2 + shape[1] / 2)] for x, y in zip(antenna_info['x'], antenna_info['y'])]
 
-    antenna_info['phasor'] = [ska.loss_with_length_freq(l, dt, reflection_order, incl_delta=atten_skin_effect,
-                                                        incl_sigma=atten_conductivity,
-                                                        incl_tangent=atten_tangent,
-                                                        incl_thermal=atten_thermal,
-                                                        incl_reflections=cable_reflections) for l, dt in
+    antenna_info['phasor'] = [ska.get_S21(l, dt, cable_reflections=cable_reflections,
+                                          atten_bead=const_atten) for l, dt in
                               zip(antenna_info['cable_length'], antenna_info['delta_t'])]
     return antenna_info

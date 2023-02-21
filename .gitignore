@@ -1,3 +1,6 @@
 antenna_gains/
 /End2End/GLEAM_EGC.fits
+/End2End/_cache
 /comoving/
+sky_map/gleamegc.dat
+sky_map/GLEAM_EGC_v2.fits

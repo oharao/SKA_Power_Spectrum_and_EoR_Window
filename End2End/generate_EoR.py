@@ -4,13 +4,16 @@ reduced refers to attempt at averging abs(v^2) over the +ve/-ve delay
 """
 
 import csv
+from bisect import bisect_left
+
+import astropy.constants as const
+import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import oskar
-from bisect import bisect_left
+from astropy.cosmology import FlatLambdaCDM
 from matplotlib.colors import LogNorm
-from scipy.fft import fft, ifft, fftfreq
+from scipy.fft import fft, fftfreq
 from scipy.signal import windows
 
 
@@ -52,19 +55,12 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, channels, basel
             vis = block.cross_correlations()
             vis_data[k, :] = (vis[row, 0])[:, 0][baseline_mag.argsort()]
 
-    if control is False:
-        baselines_index = np.where(np.abs(vis_data[0]) != 0)
-        vis_data = vis_data[:, baselines_index[0][0]:baselines_index[0][-1]]
-
-    window_vector = windows.blackmanharris(channels)
-    window_array = np.tile(window_vector ** 2, (len(vis_data[0]), 1)).T
-    window_norm = np.sum(window_vector ** 2)
-    vis_data2 = vis_data * window_array / window_norm
-    vis_delay = fft(vis_data2, axis=0)  # normalisation by 1/N because norm=forward/backwards does not work
-    if control is False:
-        return vis_delay, baselines_index[0][0], baselines_index[0][-1]
-    else:
-        return vis_delay
+    window_vector = windows.blackmanharris(channels) ** 2
+    window_array = np.tile(window_vector, (len(vis_data[0]), 1)).T
+    window_norm = np.sum(window_vector)
+    vis_data = vis_data * window_array / window_norm
+    vis_delay = fft(vis_data, axis=0)  # normalisation by 1/N because norm=forward/backwards does not work
+    return vis_delay
 
 
 # used to be the same function as delay_transform but separated to speed it up
@@ -86,6 +82,7 @@ def get_baselines_mag(name1, name2, filepath, freq_values):
     """
     freq = '%0.3f' % float((freq_values / 1e6)[0])
 
+    print(filepath + "/" + name1 + freq + name2)
     (header, handle) = oskar.VisHeader.read(filepath + "/" + name1 + freq + name2)
     block = oskar.VisBlock.create_from_header(header)
     for i in range(header.num_blocks):
@@ -93,7 +90,7 @@ def get_baselines_mag(name1, name2, filepath, freq_values):
         u = block.baseline_uu_metres()
         v = block.baseline_vv_metres()
         w = block.baseline_ww_metres()
-    uvw_data = np.array((u, v, w))  # struture: uvw, baselinene
+    uvw_data = np.array((u, v, w))  # structure: uvw
     return np.linalg.norm(uvw_data, axis=0)
 
 
@@ -108,7 +105,8 @@ def get_delay_times(freq, freq_interval):
     Returns:
         numpy.ndarray: An array of delay times in seconds.
     """
-    delay_time = fftfreq(len(freq), freq_interval)
+    delay_time = fftfreq(len(freq), freq_interval)  # /(2*np.pi)
+    # delay_time = 1/(freq - freq[0] + freq_interval)
     return delay_time
 
 
@@ -131,16 +129,72 @@ def get_k_parallel(z, tau_vec):
     """
     # Set cosmological parameters
     omega_m = 0.3156
-    omega_lambda = 0.6844
-    omega_r = 8e-5
-
-    # Calculate E_z
-    E_z = np.sqrt(omega_r * (1 + z) ** 4 + omega_m * (1 + z) ** 3 + omega_lambda)
+    H0 = 70  # km/s/Mpc
+    f_21 = (1420.0 * u.MHz).to(1 / u.s)
+    cosmo = FlatLambdaCDM(H0=H0, Om0=omega_m)
 
     # Calculate k_parallel
-    k_parallel = (np.divide(2 * np.pi * tau_vec * 1420.0e6 * 1e5 * E_z, 3e8 * (1 + z) ** 2))
+    k_parallel = (tau_vec * np.divide(2 * np.pi * cosmo.H(z) * f_21, const.c.to(u.km / u.s) * (1 + z) ** 2))
 
-    return k_parallel
+    return k_parallel.value
+
+
+def get_k_perp(baseline_mag_vec, freq):
+    """
+    Calculate the perpendicular wave vector for a given baseline magnitude, frequency, and comoving distance.
+
+    Parameters
+    ----------
+    baseline_mag_vec : numpy array
+        Array of values representing the magnitude of the baseline vector.
+    freq : float
+        Frequency value.
+    Dc : float
+        Comoving distance value.
+
+    Returns
+    -------
+    k_perp : numpy array
+        Array of values representing the perpendicular wave vector.
+
+    """
+    # Set cosmological parameters
+    omega_m = 0.3156
+    H0 = 70  # km/s/Mpc
+    f_21 = (1420.0 * u.MHz).to(1 / u.s)
+    cosmo = FlatLambdaCDM(H0=H0, Om0=omega_m)
+
+    # Calculate k_perp using the given inputs
+    z = f_21 / (freq * u.Hz) - 1
+    wavelength = const.c / freq
+    k_perp = np.divide(2 * np.pi * (baseline_mag_vec / wavelength), cosmo.comoving_transverse_distance(z))
+
+    return k_perp.value
+
+
+def get_cosmological_model(H0=100, Omega_m0=0.3156):
+    from astropy.cosmology import FlatLambdaCDM
+    cosmo = FlatLambdaCDM(H0=H0, Om0=Omega_m0)
+    return cosmo
+
+
+def get_pixel_size(z, model, pixel=3 * u.Mpc):
+    return (model.arcsec_per_kpc_comoving(z) * pixel.to(u.kpc)).to(u.deg)
+
+
+def get_delta_dc(freq, bandwidth, model):
+    z = 1420.0e6 / freq - 1
+    z_interval = z - (1420.0e6 / (freq + bandwidth) - 1)
+    delta_dc = np.abs(
+        model.comoving_transverse_distance(z[:, None] + z_interval[:, None]) - model.comoving_transverse_distance(
+            z[:, None]))
+    return delta_dc
+
+
+def get_dc(freq, model):
+    z = 1420.0e6 / freq - 1
+    dc = model.comoving_transverse_distance(z)
+    return dc
 
 
 def get_Ez(z):
@@ -169,31 +223,6 @@ def get_Ez(z):
     return Ez
 
 
-def get_k_perp(baseline_mag_vec, freq, Dc):
-    """
-    Calculate the perpendicular wave vector for a given baseline magnitude, frequency, and comoving distance.
-
-    Parameters
-    ----------
-    baseline_mag_vec : numpy array
-        Array of values representing the magnitude of the baseline vector.
-    freq : float
-        Frequency value.
-    Dc : float
-        Comoving distance value.
-
-    Returns
-    -------
-    k_perp : numpy array
-        Array of values representing the perpendicular wave vector.
-
-    """
-    # Calculate k_perp using the given inputs
-    k_perp = np.divide(2 * np.pi * freq * baseline_mag_vec, 3e8 * Dc)
-
-    return k_perp
-
-
 def get_vis_boundaries(sorted_baseline_mag, N=10):
     """
     Calculate the boundaries for log binning of visibility data.
@@ -214,9 +243,9 @@ def get_vis_boundaries(sorted_baseline_mag, N=10):
 
     """
     # Set scale factor for binning
-    scale_factor = 2
+    scale_factor = 1.5
 
-    # Calculate block boundaries using log binning
+    # Calculate block boundaries using power law binning
     baseline_block_boundaries = np.power(np.linspace(np.power(sorted_baseline_mag[0], 1 / float(scale_factor)),
                                                      np.power(sorted_baseline_mag[-1], 1 / float(scale_factor)),
                                                      num=N + 1), scale_factor)
@@ -283,7 +312,7 @@ def get_delta_Dc_values(delta_Dc_file):
     return delta_Dc_values
 
 
-def get_Pd_avg_unfolded_binning(name1: str, name2: str, control_path: str, filepath: str, N_baselines: int,
+def get_Pd_avg_unfolded_binning(name1: str, name2: str, filepath: str, N_baselines: int,
                                 freq_values: np.ndarray, freq_interval: float, channels: int, time_samples: int,
                                 Dc: np.ndarray, delta_Dc: np.ndarray, wavelength: np.ndarray, z: float,
                                 N_bins: int) -> np.ndarray:
@@ -296,8 +325,6 @@ def get_Pd_avg_unfolded_binning(name1: str, name2: str, control_path: str, filep
         File name prefix.
     name2 : str
         File name sufix.
-    control_path : str
-        Path to the control observation data.
     filepath : str
         Path to the observation data.
     N_baselines : int
@@ -334,92 +361,54 @@ def get_Pd_avg_unfolded_binning(name1: str, name2: str, control_path: str, filep
     sorted_delay_values = np.sort(delay_values)
 
     # divide the baselines into bins based on their magnitude
-    vis_position = get_vis_boundaries(sorted_baseline_mag, N_bins)[0]
+    vis_position, baseline_block_boundaries = get_vis_boundaries(sorted_baseline_mag, N_bins)
 
     sum_sorted_vis = np.zeros([len(sorted_delay_values), N_bins])
-    sum_sorted_vis_control = np.zeros([len(sorted_delay_values), N_bins])
-    sum_sorted_vis_residual = np.zeros([len(sorted_delay_values), N_bins])
 
     # compute the power delay spectrum for each time sample
     for j in np.arange(time_samples):
-        delay_data, N1, N2 = delay_transform(name1, name2, filepath, j * N_baselines, N_baselines, freq_values,
-                                             channels, baseline_mag)
-        vis_data = np.zeros((delay_values.shape[0], baseline_mag.shape[0]), dtype='complex_')
-        vis_data[:, N1:N2] = delay_data
+        delay_data = delay_transform(name1, name2, filepath, j * N_baselines, N_baselines, freq_values,
+                                     channels, baseline_mag)
 
-        delay_data_control, N3, N4 = delay_transform(name1, name2, control_path, j * N_baselines,
-                                                     N_baselines, freq_values,
-                                                     channels, baseline_mag)
-        vis_data_control = np.zeros((delay_values.shape[0], baseline_mag.shape[0]), dtype='complex_')
-        vis_data_control[:, N3:N4] = delay_data_control
-
-        N_start = max(N1, N3)
-        N_stop = min(N2, N4)
-
-        vis_data_residual = vis_data[:, N_start:N_stop] - vis_data_control[:, N_start:N_stop]
-
-        vis_delay = np.abs(vis_data) ** 2  # get modulus squared
-        vis_delay_control = np.abs(vis_data_control[:, N_start:N_stop]) ** 2
-        vis_delay_residual = np.abs(vis_data_residual) ** 2
+        vis_delay = np.abs(delay_data) ** 2  # get modulus squared
 
         # sort by delay values
         sorted_vis_delay = vis_delay[delay_values.argsort(), :]
-        sorted_vis_delay_control = vis_delay_control[delay_values.argsort(), :]
-        sorted_vis_delay_residual = vis_delay_residual[delay_values.argsort(), :]
 
         sorted_vis_delay_bins = np.zeros([channels, N_bins])
-        sorted_vis_delay_bins_control = np.zeros([channels, N_bins])
-        sorted_vis_delay_bins_residual = np.zeros([channels, N_bins])
         for q in range(N_bins):
             if vis_position[q] != vis_position[q + 1]:
                 sorted_vis_delay_bins[:, q] = np.sum(sorted_vis_delay[:, vis_position[q]:vis_position[q + 1] - 1],
                                                      axis=-1) / (vis_position[q + 1] - vis_position[q])
-                sorted_vis_delay_bins_control[:, q] = np.sum(
-                    sorted_vis_delay_control[:, vis_position[q]:vis_position[q + 1] - 1], axis=-1) / (
-                                                              vis_position[q + 1] - vis_position[q])
-                sorted_vis_delay_bins_residual[:, q] = np.sum(
-                    sorted_vis_delay_residual[:, vis_position[q]:vis_position[q + 1] - 1], axis=-1) / (
-                                                               vis_position[q + 1] - vis_position[q])
+
         sum_sorted_vis = sum_sorted_vis + sorted_vis_delay_bins
-        sum_sorted_vis_control = sum_sorted_vis_control + sorted_vis_delay_bins_control
-        sum_sorted_vis_residual = sum_sorted_vis_residual + sorted_vis_delay_bins_residual
 
     avg_sorted_vis = sum_sorted_vis / time_samples
-    avg_sorted_vis_control = sum_sorted_vis_control / time_samples
-    avg_sorted_vis_residual = sum_sorted_vis_residual / time_samples
 
-    k_B = 1.38e-23  # Boltzman constant
-
-    # delayed power spectrum, also A_e?? 40*N of gleam
-    P_d = (avg_sorted_vis * 1e-52 * 1e6) * (1e6 / (freq_interval ** 2 * wavelength[:, None] ** 2)) * Dc[:,
-                                                                                                     None] ** 2 * np.insert(
-        np.insert(delta_Dc, -1, delta_Dc[-1]), 0, delta_Dc[0])[:, None] * (
-                  wavelength[:, None] ** 2 / (2 * k_B)) ** 2
-    P_d_control = (avg_sorted_vis_control * 1e-52 * 1e6) * (1e6 / (freq_interval ** 2 * wavelength[:, None] ** 2)) * Dc[
-                                                                                                                     :,
-                                                                                                                     None] ** 2 * np.insert(
-        np.insert(delta_Dc, -1, delta_Dc[-1]), 0, delta_Dc[0])[:, None] * (
-                          wavelength[:, None] ** 2 / (2 * k_B)) ** 2
-    P_d_residual = (avg_sorted_vis_residual * 1e-52 * 1e6) * (
-                1e6 / (freq_interval ** 2 * wavelength[:, None] ** 2)) * Dc[:, None] ** 2 * np.insert(
-        np.insert(delta_Dc, -1, delta_Dc[-1]), 0, delta_Dc[0])[:, None] * (
-                           wavelength[:, None] ** 2 / (2 * k_B)) ** 2
-
-    baseline_block_boundaries = get_vis_boundaries(sorted_baseline_mag[N_start:N_stop], N_bins)[1]
-
-    # eloy said A/T is 1000m^2, and conversion from Jy gives the power of -52
     k_parallel = get_k_parallel(z[delay_values.argsort()], sorted_delay_values)
+    k_perp = get_k_perp(baseline_block_boundaries, np.median(freq_values))
 
-    k_perp = get_k_perp(baseline_block_boundaries, freq_values[int(Dc.shape[0] / 2)], Dc[int(Dc.shape[0] / 2)])
+    k_B = 1.380649e-23  # Boltzman constant
 
-    eor = P_d, k_parallel, k_perp
-    eor_control = P_d_control, k_parallel, k_perp
-    eor_residual = P_d_residual, k_parallel, k_perp
+    A_eff = np.pi * (38 * u.m / 2) ** 2
+    factor = ((1 * u.Jy).to(u.J / (u.m ** 2))) ** 2 * (
+                (np.divide((wavelength * u.m) ** 2, 2 * const.k_B.to(u.J / u.mK))) ** 2) * np.divide(
+        (Dc ** 2 * delta_Dc.T)[0], freq_interval * u.Hz) * np.divide(A_eff,
+                                                                     (wavelength * u.m) ** 2 * freq_interval * u.Hz)
 
-    return eor, eor_control, eor_residual, sorted_delay_values
+    P_d = avg_sorted_vis * factor[:, None] * freq_interval ** 2
+
+    xx, yy = np.meshgrid(k_perp[:-1], k_parallel)
+    k = np.sqrt(yy ** 2 + xx ** 2)
+
+    delta = P_d  # * k ** 3 / (2 * np.pi**2)
+
+    eor = delta.value, k_parallel, k_perp[:-1]
+
+    return eor, sorted_delay_values, baseline_block_boundaries
 
 
-def get_limits(signal, Dc_values, z_values, wavelength_values):
+def get_limits(signal, Dc_values, z_values, wavelength_values, fov_angle):
     """
     Calculates the horizon and beam limits of a radio telescope observation using GLEAM data.
 
@@ -439,14 +428,15 @@ def get_limits(signal, Dc_values, z_values, wavelength_values):
     """
     # extract GLEAM signal components
     P_d_gleam, k_parallel_plot, k_perp_plot = signal[0], signal[1], signal[2]
-
     # calculate horizon limit gradient and x values
-    horizon_limit_gradient = Dc_values[20] * get_Ez(z_values[20]) / (3000 * (1 + z_values[20]))
-    horizon_limit_x = np.arange(k_perp_plot.min(), k_perp_plot.max(), 0.1)
+    cosmo = get_cosmological_model()
+    k_mode_gradient = np.divide(Dc_values * cosmo.H(z_values), const.c.to(u.km / u.s) * (1 + z_values)).value.max()
+    horizon_limit_gradient = np.sin(np.radians(fov_angle)) * k_mode_gradient
+    horizon_limit_x = k_perp_plot
 
     # calculate horizon limit and beam limit y values
     horizon_limit_y = horizon_limit_x * horizon_limit_gradient
-    beam_limit_gradient = horizon_limit_gradient * wavelength_values[20] / 38
+    beam_limit_gradient = k_mode_gradient * np.sin((wavelength_values/38).max())
     beam_limit_y = beam_limit_gradient * horizon_limit_x
     horizon_limit_y_neg = -horizon_limit_x * horizon_limit_gradient
     beam_limit_y_neg = -beam_limit_gradient * horizon_limit_x
@@ -455,7 +445,7 @@ def get_limits(signal, Dc_values, z_values, wavelength_values):
     return horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg
 
 
-def plot_log(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnuplot'):
+def plot_lognorm(limits, gleam, name, delay, baselines, vmax=1e12, vmin=1e-8, cmap='gnuplot'):
     """
     Plot a logarithmic scale color map of a signal in k-space, along with white and black contours that represent the horizon and beam limits, respectively.
 
@@ -468,8 +458,6 @@ def plot_log(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnup
         A tuple of the form (P_d_gleam, k_parallel_plot, k_perp_plot) where P_d_gleam is a 2D array containing
         the power spectrum values, and k_parallel_plot and k_perp_plot are arrays of the k values for the
         power spectrum in the parallel and perpendicular directions, respectively.
-    signal: numpy array
-        A 2D numpy array containing the signal values.
     name: str
         The name of the output file to be saved.
     delay: numpy array
@@ -484,157 +472,91 @@ def plot_log(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnup
     """
     horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg = limits
     P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
-    masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
+    masked_P_d_gleam = np.ma.masked_equal(P_d_gleam, 0.0, copy=False)
 
-    fig, ax1 = plt.subplots()
-    c = ax1.pcolormesh(k_perp_plot[:-1], k_parallel_plot[:], signal[:, :],
-                       norm=LogNorm(), cmap=cmap)
-    ax2 = ax1.twinx()
+    shift = 0  # K_par axis shift
+    k_par_index = int(len(k_parallel_plot) / 2) + 1 + shift
 
+    k_par_slice = int(5 * len(k_parallel_plot) / 9)
+    k_perp_slice = int(len(k_perp_plot) / 2)
+
+
+    fig = plt.figure(figsize=(11, 10))
+    ax1 = plt.subplot2grid((12, 10), (2, 0), rowspan=10, colspan=6)
+
+    pcm = ax1.pcolormesh(k_perp_plot, k_parallel_plot,
+                         P_d_gleam, cmap=cmap, norm=LogNorm(vmin=vmin, vmax=vmax))
+    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.3)
+    ax1.set_ylim(k_parallel_plot[k_par_index], k_parallel_plot.max())
+
+    # Set the scales of the axes to log
     ax1.set_xscale('log')
     ax1.set_yscale('log')
-    ax2.set_yscale('log')
+
+    # Add labels to the axes
     ax1.set_xlabel('$k_\perp [h Mpc^{-1}]$')
     ax1.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    ax2.set_ylabel('Log(Delay) $[ns]$')
 
-    fig.colorbar(c, label='$P_d$ $[mK^2(Mpc/h)^3]$', pad=0.13)
+    ax1.plot(horizon_limit_x, horizon_limit_y, color='black')
+    ax1.plot(horizon_limit_x, horizon_limit_y + 0.1, color='black')
+    ax1.plot(horizon_limit_x, beam_limit_y, color='black', linestyle='dashed')
+    ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='black')
+    ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black', linestyle='dashed')
 
-    ax1.plot(horizon_limit_x, horizon_limit_y, color='white')
-    ax1.plot(horizon_limit_x, beam_limit_y, color='black')
-    ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='white')
-    ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black')
-    ax1.set_ylim(k_parallel_plot[21:].min(), k_parallel_plot.max())
-    ax2.set_ylim(delay[21:].min() * 1e9, delay.max() * 1e9)
-    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
-    ax2.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
-    plt.savefig(name)
+    ax1.vlines(k_perp_plot[k_perp_slice], k_parallel_plot.min(), k_parallel_plot.max(), color='blue')
+    ax1.hlines(k_parallel_plot[k_par_slice], k_perp_plot.min(), k_perp_plot.max(), color='red')
 
+    # Add k_perp slice
+    ax2 = plt.subplot2grid((12, 10), (0, 0), rowspan=2, colspan=6)
+    ax2.loglog(k_perp_plot, P_d_gleam[k_par_slice, :], 'red')
+    ax2.set_ylabel('$P(k)$ $[mK^2 Mpc^3]$')
+    ax2.xaxis.set_ticks_position('none')
+    ax2.set(xticklabels=[])
+    ax2.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.3)
+    ax4 = ax2.twiny()
+    ax4.set_xscale('log')
+    ax4.set_xlabel('Baseline Length ($\lambda$)')
+    ax4.set_xlim(baselines.min(), baselines.max() / 1.3)
 
-def plot_contour(limits, gleam, signal, name, delay, vmax=1e9, vmin=1e-6, cmap='gnuplot'):
-    """
-    Plot a contoured logarithmic scale color map of a signal in k-space, along with white and black contours that
-    represent the horizon and beam limits, respectively.
+    # Add K_parallel slice
+    ax3 = plt.subplot2grid((12, 10), (2, 6), rowspan=10, colspan=2)
+    ax3.loglog(P_d_gleam[:, k_perp_slice], k_parallel_plot, 'blue')
+    ax3.set_xlabel('$P(k)$ $[mK^2 Mpc^3]$')
+    ax3.yaxis.set_ticks_position('none')
+    ax3.set(yticklabels=[])
+    ax3.set_ylim(k_parallel_plot[k_par_index], k_parallel_plot.max())
+    ax5 = ax3.twinx()
+    ax5.set_yscale('log')
+    ax5.set_ylabel('Delay ($ns$)')
+    ax5.set_ylim(delay[k_par_index].min(), delay.max() / 1.3)
 
-    Parameters:
-    -----------
-    limits: tuple
-        A tuple of the form (horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg)
-        where each element is a list of float values representing the limits of the horizon and the beam.
-    gleam: tuple
-        A tuple of the form (P_d_gleam, k_parallel_plot, k_perp_plot) where P_d_gleam is a 2D array containing
-        the power spectrum values, and k_parallel_plot and k_perp_plot are arrays of the k values for the
-        power spectrum in the parallel and perpendicular directions, respectively.
-    signal: numpy array
-        A 2D numpy array containing the signal values.
-    name: str
-        The name of the output file to be saved.
-    delay: numpy array
-        A 1D numpy array of delay values.
-    vmax: float, optional
-        The maximum value of the signal to be displayed, defaults to 1e9.
-    vmin: float, optional
-        The minimum value of the signal to be displayed, defaults to 1e-6.
-    cmap: str, optional
-        The color map to be used, defaults to 'gnuplot'.
+    ax2.xaxis.grid(True, which='major', linestyle='dashed')
+    ax3.yaxis.grid(True, which='major', linestyle='dashed')
+    ax1.grid(True, which='major', linestyle='dashed')
 
-    Returns:
-    --------
-    None
-    """
-    horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg = limits
-    P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
-    masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
+    ax3.hlines(horizon_limit_y[k_perp_slice], P_d_gleam[:, k_perp_slice].min(),
+               P_d_gleam[:, k_perp_slice].max(), color='black')
+    ax3.hlines(beam_limit_y[k_perp_slice], P_d_gleam[:, k_perp_slice].min(),
+               P_d_gleam[:, k_perp_slice].max(), color='black', linestyle='dashed')
+    ax2.vlines(k_perp_plot[np.argmax((horizon_limit_y >= k_parallel_plot[k_par_slice]) == True)],
+               P_d_gleam[k_par_slice, :].min(),
+               P_d_gleam[k_par_slice, :].max(), color='black')
 
-    fig, ax1 = plt.subplots()
-    from matplotlib import ticker
-    c = ax1.contourf(k_perp_plot[:-1], k_parallel_plot, signal, cmap=cmap, norm=LogNorm(), antialiased=True)
-    cbar = fig.colorbar(c, pad=0.13)
-    cbar.ax.set_yscale('log')
+    plt.subplots_adjust(hspace=0.05, wspace=0.05)
 
-    ax2 = ax1.twinx()
+    cbar_ax = fig.add_axes([0.1257, 0.03, 0.463, 0.02])
+    # Add a colorbar
+    cbar = fig.colorbar(pcm, cax=cbar_ax, orientation='horizontal', label='$P(k)$ $[mK^2 Mpc^3]$', extend='both')
 
-    ax1.set_xscale('log')
-    ax1.set_yscale('log')
-    ax2.set_yscale('log')
-    ax1.set_xlabel('$k_\perp [h Mpc^{-1}]$')
-    ax1.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    ax2.set_ylabel('Log(Delay) $[ns]$')
-
-    ax1.plot(horizon_limit_x, horizon_limit_y, color='white')
-    ax1.plot(horizon_limit_x, beam_limit_y, color='black')
-    ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='white')
-    ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black')
-    ax1.set_ylim(k_parallel_plot[21:].min(), k_parallel_plot.max())
-    ax2.set_ylim(delay[21:].min() * 1e9, delay.max() * 1e9)
-    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
-    ax2.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
-    plt.savefig(name)
+    plt.savefig(name, bbox_inches='tight')
 
 
-def plot_lin(limits, gleam, signal, name, delay, vmax=1e8, vmin=1e0, cmap='gnuplot'):
-    """
-    Plot a linear scale color map of a signal in k-space, along with white and black contours that
-    represent the horizon and beam limits, respectively.
-
-    Parameters:
-    -----------
-    limits: tuple
-        A tuple of the form (horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg)
-        where each element is a list of float values representing the limits of the horizon and the beam.
-    gleam: tuple
-        A tuple of the form (P_d_gleam, k_parallel_plot, k_perp_plot) where P_d_gleam is a 2D array containing
-        the power spectrum values, and k_parallel_plot and k_perp_plot are arrays of the k values for the
-        power spectrum in the parallel and perpendicular directions, respectively.
-    signal: numpy array
-        A 2D numpy array containing the signal values.
-    name: str
-        The name of the output file to be saved.
-    delay: numpy array
-        A 1D numpy array of delay values.
-    vmax: float, optional
-        The maximum value of the signal to be displayed, defaults to 1e9.
-    vmin: float, optional
-        The minimum value of the signal to be displayed, defaults to 1e-6.
-    cmap: str, optional
-        The color map to be used, defaults to 'gnuplot'.
-    """
-
-    horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg = limits
-    P_d_gleam, k_parallel_plot, k_perp_plot = gleam[0], gleam[1], gleam[2]
-    masked_P_d_gleam = np.ma.masked_equal(signal, 0.0, copy=False)
-
-    fig, ax1 = plt.subplots()
-
-    c = ax1.pcolormesh(k_perp_plot[:-1], k_parallel_plot, signal,
-                       norm=LogNorm(), cmap=cmap)
-
-    # ax2 = ax1.twinx()
-
-    ax1.set_ylim(k_parallel_plot.min(), k_parallel_plot.max())
-    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max())
-    # ax2.set_ylim(delay.min() * 1e9, delay.max() * 1e9)
-    ax1.set_xlabel('$k_\perp [h Mpc^{-1}]$')
-    ax1.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
-    # ax2.set_ylabel('Log(Delay) $[ns]$')
-    fig.colorbar(c, label='$P_d$ $[mK^2(Mpc/h)^3]$')  # , pad=0.19)
-
-    ax1.plot(horizon_limit_x, horizon_limit_y, color='white')
-    ax1.plot(horizon_limit_x, beam_limit_y, color='black')
-    ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='white')
-    ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black')
-    ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.5)
-    plt.savefig(name)
-
-
-def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channel_bandwidth, dc_path):
+def plot_eor(filepath, output_dir, min_freq, max_freq, channels, channel_bandwidth, dc_path):
     """
     Plot the Epoch of Reionization (EoR) power spectrum and window.
 
     Parameters
     ----------
-    control : str
-        Path to the control file containing the list of baselines.
     filepath : str
         Path to the directory containing the baseline data files.
     output_dir : str
@@ -660,40 +582,37 @@ def plot_eor(control, filepath, output_dir, min_freq, max_freq, channels, channe
     ValueError: If any of the frequency or bandwidth parameters are invalid.
 
     """
+    fov_angle = 90 # 86.8  # in Degrees
+
     freq_values = np.arange(min_freq * 1e9, max_freq * 1e9, channel_bandwidth * 1e9)
     freq_interval = channel_bandwidth * 1e9  # change this if channels change
 
     wavelength_values = 3e8 / freq_values
     z_values = 1420.0e6 / freq_values - 1
-    delay_values = get_delay_times(freq_values, freq_interval)
 
     gleam_name1 = "gleam_all_freq_"
     gleam_name2 = "_MHz.vis"
 
-    Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path + '/los_comoving_distance.csv'
-    Dc_values = get_Dc_values(Dc_file)
-
-    delta_Dc_file = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path + '/delta_los_comoving_distance.csv'
-    delta_Dc_values = get_delta_Dc_values(delta_Dc_file)
+    cosmo = get_cosmological_model()
+    Dc_values = get_dc(freq=freq_values, model=cosmo).value
+    delta_Dc_values = get_delta_dc(freq=freq_values, bandwidth=freq_interval, model=cosmo).value
 
     # now try one channel only, can probably loop over other channels later
     time_samples = 1  # 40  # number of time samples to mod average over
-    N_baselines = 29646  # 130816
-    N_bins = 800
+    N_baselines = 24976  # 130816
+    N_bins = 250
 
-    gleam, gleam_control, gleam_residual, delays = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, control,
-                                                                               filepath,
-                                                                               N_baselines, freq_values, freq_interval,
-                                                                               channels, time_samples,
-                                                                               Dc_values,
-                                                                               delta_Dc_values,
-                                                                               wavelength_values,
-                                                                               z_values,
-                                                                               N_bins)
+    gleam, delays, baselines = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath,
+                                                           N_baselines, freq_values, freq_interval,
+                                                           channels, time_samples, Dc_values,
+                                                           delta_Dc_values, wavelength_values, z_values,
+                                                           N_bins)
 
-    limits = get_limits(gleam, Dc_values, z_values, wavelength_values)
+    limits = get_limits(gleam, Dc_values, z_values, wavelength_values, fov_angle)
 
-    plot_log(limits, gleam, gleam[0], output_dir + "/result_log.png", delays)
-    plot_log(limits, gleam_control, gleam_control[0], output_dir + "/control_log.png", delays)
-    plot_log(limits, gleam_residual, gleam_residual[0], output_dir + "/residual_log.png", delays)
-    plot_log(limits, gleam_residual, gleam_control[0] / gleam[0], output_dir + "/ratio_log.png", delays)
+    baselines_wavelengths = baselines / np.median(wavelength_values)
+
+    plot_lognorm(limits, gleam, output_dir + "/result_log.png", delays * 1e9, baselines_wavelengths)
+    np.save(output_dir + '/Delta_PS.npy', np.array(gleam, dtype=object))
+
+    return limits, output_dir + '/Delta_PS.npy', output_dir, delays * 1e9, baselines_wavelengths

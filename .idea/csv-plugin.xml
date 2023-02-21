@@ -3,21 +3,7 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
-        <entry key="\comoving\70-100MHz\delta_los_comoving_distance.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="\comoving\70-100MHz\los_comoving_distance.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="\comoving\70-100MHz\pixel_size_deg.csv">
+        <entry key="\comoving\130-170MHz_256\pixel_size_deg.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

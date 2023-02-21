@@ -66,3 +66,17 @@ SKA_Power_Spectrum_and_EoR_Window
 ├── gleam_all_freq_70.024_MHz.vis
 ```
 
+Project Environment & Dependencies 
+----------------------------------
+To run the Square Kilometer Array End-2-End Pipeline for Power Spectrum & EoR analysis the following steps may be taken
+to install the required dependencies, on a HPC service.
+1. ``module load singularity``
+2. ``singularity build --sandbox test docker://oscarohara/oskar_pipeline``
+
+
+#### Updating Docker Hub 
+Once the Dockerfile has been modified, the image must be rebuilt before being pushed to Docker Hub for distribution. 
+1. Once in the repository root directory the Image may be built: ``docker build . -t oscarohara/oskar_pipeline:v0.0`` 
+whilst correctly enumerating the version number with respect to the original. 
+2. The Image may then be pushed to Docker Hub for distribution to HPC services
+``docker push oscarohara/oskar_pipeline:v0.0`` 

@@ -9,6 +9,7 @@ import numpy
 from scipy.fft import fftfreq
 import csv
 from scipy.signal import windows
+from scipy import stats
 
 def radial_profile(image, centre=None):
     if centre is None:
@@ -62,32 +63,17 @@ def main(file_name, k=0):
     lambda_max = cellsize_uv * len(profile)
     lambda_axis = numpy.linspace(cellsize_uv, lambda_max, len(profile))
     theta_axis = 180.0 / (numpy.pi * lambda_axis)
-
-    """
-    plt.subplot(121)
-    plt.imshow(spectrum, norm=LogNorm())
-    plt.gca().set_title("Amplitude(FFT(residual image))")
-    plt.subplot(122)
-    plt.plot(theta_axis, profile)
-    plt.gca().set_title("Power spectrum of residual image")
-    plt.gca().set_xlabel("Degrees")
-    plt.gca().set_xscale('log')
-    plt.gca().set_yscale('log')
-    plt.savefig('power_spectrum/' + str(k) + '_ps.png')
-    plt.clf()
-    """
-
     return profile, theta_axis
 
 if __name__ == '__main__':
-    freq_values = np.arange(0.07e9, 0.1001e9, 0.000012e9)
+    freq_values = np.arange(0.130e9, 0.17e9, 0.000012e9)
     freq_interval = 0.000012e9
     delay_values = np.sort(fftfreq(len(freq_values), freq_interval))
     z_values = 1420.0e6 / freq_values - 1
 
-    root = 'SKA_Power_Spectrum_and_EoR_Window/comoving/test/'
+    root = 'Data_for_Oscar/' #'SKA_Power_Spectrum_and_EoR_Window/comoving/130-170MHz/'
 
-    ps = np.zeros([len(freq_values), 363])
+    ps = np.zeros([len(freq_values), 182])
     for k in range(len(freq_values)):
         str_freq = format(freq_values[k] * 1e-6, ".3f")
         file_path = root + 'freq_' + str_freq + '_MHz_interpolate_T21_slices.fits'
@@ -100,10 +86,22 @@ if __name__ == '__main__':
     Dc_file = root + '/los_comoving_distance.csv'
     Dc = get_Dc_values(Dc_file)
 
-    baseline_lengths = get_baseline(theta_axis, freq_values[int(len(freq_values) / 2)], 2)
-    k_perp = get_k_perp(baseline_lengths, freq_values[int(len(freq_values) / 2)], Dc[int(len(Dc) / 2)])
+    baseline_lengths = get_baseline(theta_axis, freq_values[-1], 2)
+    k_perp = get_k_perp(baseline_lengths, freq_values[-1], Dc[-1])
 
     P_d = ps[:, 1:-1].transpose()
+
+    xx, yy = np.meshgrid(k_perp, k_parallel)
+    k = np.sqrt(yy ** 2 + xx ** 2)
+    delta = ps * k ** 3 / (2 * np.pi ** 2)
+    bins = stats.binned_statistic(np.reshape(k.transpose(), -1), np.reshape(delta.transpose(), -1), statistic='mean',
+                                  bins=500)
+    plt.clf()
+    c = plt.loglog(bins.bin_edges[:-1], bins.statistic)
+    plt.xlabel('$k$')
+    plt.ylabel('$k_\parallel [h Mpc^{-1}]$')
+    plt.savefig('1D_ps.png')
+    plt.clf()
 
     plt.clf()
     c = plt.pcolormesh(k_parallel, k_perp[1:-1],  ps[:, 1:-1].transpose(), norm=LogNorm(), cmap='gnuplot')
@@ -114,4 +112,4 @@ if __name__ == '__main__':
     plt.xlim(0.0071873657302871305, 1.3081005629122575)
     plt.ylim(8e-2, 1.3e0)
     plt.colorbar(c)
-    plt.savefig('ps_test.png')
+    plt.savefig('2D_ps.png')

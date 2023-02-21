@@ -1,38 +1,84 @@
-from scipy.io import loadmat
-import numpy as np
-import matplotlib.pyplot as plt
-from astropy.io import fits
-from scipy.integrate import quad
-from scipy import interpolate
 import csv
 
+import astropy.units as u
+import numpy as np
+import scipy
+import tools21cm as t2c
+from astropy.io import fits
+from matplotlib.transforms import (
+    Bbox, TransformedBbox)
+from mpl_toolkits.axes_grid1.inset_locator import (
+    BboxPatch, BboxConnector, BboxConnectorPatch)
+from scipy import interpolate
+from scipy.integrate import quad
+from scipy.io import loadmat
 
-def Ts2T21(data_path, sim_name, redshift):
+from End2End.generate_EoR import get_cosmological_model, get_delta_dc, get_pixel_size
+
+
+def connect_bbox(bbox1, bbox2,
+                 loc1a, loc2a, loc1b, loc2b,
+                 prop_lines, prop_patches=None):
+    if prop_patches is None:
+        prop_patches = {
+            **prop_lines,
+            "alpha": prop_lines.get("alpha", 1) * 0.2,
+            "clip_on": False,
+        }
+
+    c1 = BboxConnector(
+        bbox1, bbox2, loc1=loc1a, loc2=loc2a, clip_on=False, **prop_lines)
+    c2 = BboxConnector(
+        bbox1, bbox2, loc1=loc1b, loc2=loc2b, clip_on=False, **prop_lines)
+
+    bbox_patch1 = BboxPatch(bbox1, **prop_patches)
+    bbox_patch2 = BboxPatch(bbox2, **prop_patches)
+
+    p = BboxConnectorPatch(bbox1, bbox2,
+                           loc1a=loc1a, loc2a=loc2a, loc1b=loc1b, loc2b=loc2b,
+                           clip_on=False,
+                           **prop_patches)
+
+    return c1, c2, bbox_patch1, bbox_patch2, p
+
+
+def zoom_effect01(ax1, ax2, xmin1, xmax1, xmin2, xmax2, **kwargs):
     """
-    Converts cubes of Ts to T21 assuming baryon overdensity to be 0 and xHI to be 1.
+    Connect *ax1* and *ax2*. The *xmin*-to-*xmax* range in both axes will
+    be marked.
 
-    Parameters:
-    -----------
-    data_path: str
-        path to directory containing Ts .mat files
-    sim_name: str
-        name of simulation (used to generate filename)
-    redshift: float
-        redshift value of interest
-
-    Returns:
-    --------
-    T21_cube: ndarray
-        Cube of T21 values in mK
+    Parameters
+    ----------
+    ax1
+        The main axes.
+    ax2
+        The zoomed axes.
+    xmin, xmax
+        The limits of the colored area in both plot axes.
+    **kwargs
+        Arguments passed to the patch constructor.
     """
-    Ts_filename = 'TsMat_' + str(redshift) + sim_name + '.mat'
 
-    Ts_cube_dict = loadmat(data_path + Ts_filename)
-    Ts_cube = Ts_cube_dict['Ts']
+    bbox1 = Bbox.from_extents(xmin1, 0, xmax1, 1)
+    bbox2 = Bbox.from_extents(xmin2, 0, xmax2, 1)
 
-    TR = (1 + redshift) * 2.725  # in K
-    T21_cube = (27 * ((1 + redshift) / 10) ** 0.5) * (1 - TR / Ts_cube)  # in mK
-    return T21_cube
+    mybbox1 = TransformedBbox(bbox1, ax1.get_xaxis_transform())
+    mybbox2 = TransformedBbox(bbox2, ax2.get_xaxis_transform())
+
+    prop_patches = {**kwargs, "ec": "none", "alpha": 0.2}
+
+    c1, c2, bbox_patch1, bbox_patch2, p = connect_bbox(
+        mybbox1, mybbox2,
+        loc1a=3, loc2a=2, loc1b=4, loc2b=1,
+        prop_lines=kwargs, prop_patches=prop_patches)
+
+    # ax1.add_patch(bbox_patch1)
+    # ax2.add_patch(bbox_patch2)
+    ax2.add_patch(c1)
+    ax2.add_patch(c2)
+    ax2.add_patch(p)
+
+    return c1, c2, bbox_patch1, bbox_patch2, p
 
 
 def chi_integrand(z, omega_m, omega_lambda, omega_r):
@@ -108,7 +154,7 @@ def find_pix_size(Dc_pix, N_pix, freq_values, data_path):
 
 
 # produce a .FITS file with image_data and appropriate headers
-def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg, mean,
+def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg,
                 ra_deg=60.0, dec_deg=-30.0, units="mK"):
     """
     Create a FITS file from image data and header information.
@@ -153,79 +199,12 @@ def create_fits(data_path, image_data, filename, freq, N_pix, pixel_size_deg, me
     header["CRPIX2"] = 1 + (N_pix / 2)
     header["CDELT2"] = pixel_size_deg
     header["BUNIT"] = units
-    header["CTYPE3"] = "Frequency MHz"
-    header["CRVAL3"] = freq
-    hdu = fits.PrimaryHDU((image_data - mean), header)
+    header["CTYPE3"] = "FREQ"
+    header["CRVAL3"] = freq * 1e6  # Convert to Hz
+    hdu = fits.PrimaryHDU(image_data, header)
     hdu.writeto(data_path + filename, overwrite=True)
 
     print('FITS file created for ' + str(freq) + 'MHz)')
-    print(mean)
-
-
-def T21_lin_interpolation(T21_slices, ini_z_values, final_freq_values, data_path,
-                          N_pix, Dc_pix, channel_bandwidth):
-    """
-    Compute T21 values at non-integer redshifts by interpolating the provided T21 slices
-    at a set of initial redshift values, and create .FITS files with appropriate headers
-    to store the interpolated data.
-
-    Parameters:
-    -----------
-    T21_slices : numpy.ndarray
-        A 3D numpy array containing the T21 brightness temperature slices at different
-        redshift values.
-    ini_z_values : numpy.ndarray
-        A 1D numpy array containing the redshift values at which the T21 slices were
-        computed.
-    final_freq_values : numpy.ndarray
-        A 1D numpy array containing the frequencies (in MHz) at which the T21 values
-        are desired to be interpolated.
-    data_path : str
-        The directory path where the .FITS files will be saved.
-    N_pix : int
-        The number of pixels in each dimension of the output .FITS images.
-    Dc_pix : float
-        The pixel size in comoving distance (in Mpc/h).
-    channel_bandwidth : float
-        The bandwidth (in MHz) of each frequency channel.
-
-    Returns:
-    --------
-    data_interpolate_z : numpy.ndarray
-        A 3D numpy array containing the interpolated T21 values at each desired
-        frequency value.
-    """
-
-    N_ini = len(ini_z_values)
-    if N_ini < 2:
-        print('Error: Insufficient data to perform interpolation.')
-        return
-
-    gradient_in_z = []
-    for i in range(N_ini - 1):
-        gradient = T21_slices[i + 1] - T21_slices[i]
-        gradient_in_z.append(gradient)
-
-    final_z_values = (1420 / final_freq_values) - 1
-    N_final = len(final_z_values)
-
-    pixel_size_deg = find_pix_size(Dc_pix, N_pix, final_freq_values, data_path)
-
-    data_interpolate_z = np.zeros([N_final, np.array(T21_slices).shape[1], np.array(T21_slices).shape[2]])
-    for i in range(np.array(T21_slices).shape[1]):
-        for j in range(np.array(T21_slices).shape[2]):
-            f = interpolate.interp1d(ini_z_values, np.array(T21_slices)[:, i, j], kind='cubic')
-            data_interpolate_z[:, i, j] = f(final_z_values)
-
-    mean = np.array([i.mean() for i in data_interpolate_z])
-
-    for k in range(N_final):
-        str_freq = format(final_freq_values[k], ".3f")
-        filename = 'freq_' + str_freq + '_MHz_interpolate_T21_slices.fits'
-        #create_fits(data_path, data_interpolate_z[k], filename, final_freq_values[k], N_pix, pixel_size_deg[k], mean[k])
-        create_fits(data_path, np.tile(data_interpolate_z[k] * np.sqrt(channel_bandwidth * 1e6), (3,3))[int(N_pix/2):-int(N_pix/2), int(N_pix/2):-int(N_pix/2)], filename, final_freq_values[k], N_pix*2, pixel_size_deg[k], mean[k])
-
-    return data_interpolate_z
 
 
 def get_los_comoving_distances(freq_values, freq_sides, data_path):
@@ -292,6 +271,60 @@ def get_los_comoving_distances(freq_values, freq_sides, data_path):
     return Dc, delta_Dc
 
 
+def get_cube_data(data_path, redshift):
+    filename = f'{data_path}T21_cube_{str(redshift)}_Npix512.mat'
+    cube_dict = loadmat(filename)
+    cube_brightness_temp = cube_dict['Tlin']
+
+    return cube_brightness_temp
+
+
+def create_lightcone(data_path, freq_values_mhz, bandwidth_mhz, N_pix, pixel_size_mpc):
+    cosmo = get_cosmological_model()
+
+    z_values = t2c.nu_to_z(freq_values_mhz)
+
+    z_open = None
+    lightcone, lightcone_z = [], []
+    index = []
+    # obtain trend deviation caused by lightcone effect
+    for z_file, i in zip(np.array(z_values, dtype=int), range(len(z_values))):
+        if z_open != z_file:  # loop ensuring each file is opened once
+            cube_data = get_cube_data(data_path, z_file)
+            z_open = z_file
+
+        delta_dc = get_delta_dc(np.array([freq_values_mhz.min()]) * 1e6, bandwidth_mhz * 1e6 * i, model=cosmo)[
+            0, 0].value
+
+        if (int(delta_dc / pixel_size_mpc) % N_pix) != index:  # append only unique slices and z for interp
+            index = (int(delta_dc / pixel_size_mpc) % N_pix)
+            lightcone.append(cube_data[:, :, index] - np.mean(cube_data))
+            lightcone_z.append(z_values[i])
+
+    # obtain trend
+    global_signal = []
+    z_file = np.arange(np.ceil(z_values.max()), np.floor(z_values.min()) - 1, -1, dtype=int)
+    for z in z_file:
+        global_signal.append(np.mean(get_cube_data(data_path, z)))
+    f = scipy.interpolate.interp1d(z_file, global_signal, kind='quadratic')
+    lightcone += f(lightcone_z)[:, None, None]
+
+    lightcone_hrez_z = np.zeros([len(z_values), N_pix, N_pix])
+    for i in range(np.array(lightcone).shape[1]):
+        for j in range(np.array(lightcone).shape[2]):
+            f = interpolate.interp1d(lightcone_z, np.array(lightcone)[:, i, j], kind='quadratic',
+                                     fill_value="extrapolate")
+            lightcone_hrez_z[:, i, j] = f(z_values)
+            print('x: ' + str(i), 'y: ' + str(j))
+
+    for k in range(len(z_values)):
+        str_freq = format(t2c.z_to_nu(z_values[k]), ".3f")
+        filename = 'freq_' + str_freq + '_MHz_interpolate_T21_slices.fits'
+        create_fits(data_path, lightcone_hrez_z[k], filename, t2c.z_to_nu(z_values[k]), N_pix,
+                    get_pixel_size(z_values[k], cosmo, pixel_size_mpc * u.Mpc).value)
+    return lightcone_hrez_z
+
+
 def main():
     """
     This is the main function for a script. It executes several functions and operations to extract the 21cm signal
@@ -299,15 +332,12 @@ def main():
     and stores the results in files. The function also generates a plot for a quick sanity check on the interpolation.
     """
     # ----------------------------------------------------------------------------#
-    data_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/test/'
-    sim_name = ''
-    N_pix = 256  # Data cube shape
+    data_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/130-170MHz_512/'
+    N_pix = 512  # Data cube shape
     Dc_pix = 3  # Mpc
-    z_values = range(6, 49)  # redshift integer z from 21cm simulations
-    N_z = len(z_values)
-    min_freq = 70
-    max_freq = 110.01
-    channel_bandwidth = 0.0120
+    min_freq = 135
+    max_freq = 165
+    channel_bandwidth = 0.125
 
     """
     -to interpolate and create .fits files at, MHz
@@ -319,37 +349,9 @@ def main():
     freq_sides = np.around(np.arange(min_freq - channel_bandwidth / 2, max_freq, channel_bandwidth), decimals=4)
     # ----------------------------------------------------------------------------#
 
-    # initialise empty list, T21 arrays from redshifts 12 to 19 loaded to list
-    T21_cubes = []
-    T21_slices = []
-    for i in range(N_z):
-        T21 = Ts2T21(data_path, sim_name, z_values[i])
-        T21_cubes.append(T21)
-        T21_slices.append(T21[:, :, 27])  # random 2D slice
-        print('The data cube at z=' + str(z_values[i]) + ' has shape ' + str(T21.shape))
-
-    print('T21_cubes extracted.')
-
-    # interpolation sanity check
-    N_coords = 30  # number of points to check for in data cube
-    rand_coords = np.random.randint(0, N_pix, (N_coords, 3))  # generate N_coords
-    T21_at_point = np.zeros((N_z, N_coords))  # initialising
-    for i in range(N_z):
-        T21_cube = T21_cubes[i]
-        for j in range(N_coords):
-            rand_coord = rand_coords[j]
-            T21_at_point[i, j] = T21_cube[rand_coord[0], rand_coord[1], rand_coord[2]]
-
-    plt.plot(z_values, T21_at_point)
-    plt.xlabel('Z')
-    plt.ylabel('$T_{21}$ at random sample point')
-    plt.title('21cm Cosmological Signal Per Cube Interpolation')
-    plt.savefig("redshift_interpolation.png")
-    # input('If the linear interpolation in z looks good, press enter to continue.')
-
     # Interpolate the 21cm signal at the range of frequencies
-    data_interpolate_z = T21_lin_interpolation(T21_slices, z_values, freq_values, data_path,
-                                               N_pix, Dc_pix, channel_bandwidth)
+    data_interpolate_z = create_lightcone(data_path=data_path, freq_values_mhz=freq_values,
+                                          bandwidth_mhz=channel_bandwidth, N_pix=N_pix, pixel_size_mpc=Dc_pix)
 
     # Compute the line-of-sight comoving distance and store the results in files
     get_los_comoving_distances(freq_values, freq_sides, data_path)

@@ -1,16 +1,15 @@
-import shutil
-import h5py
 import os
+import shutil
+from datetime import datetime
 
+import h5py
 import numpy as np
 import pandas as pd
 
-from datetime import datetime
-
 from SKA_Power_Spectrum_and_EoR_Window.End2End.Coaxial_Transmission import compute_interferometer_s21
+from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_oskar_gleam_model
 from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import plot_eor
 from SKA_Power_Spectrum_and_EoR_Window.End2End.logger import init_logger
-from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_oskar_gleam_model
 
 
 def to_hdf5(gains, frequencies, folder):
@@ -45,29 +44,28 @@ def to_hdf5(gains, frequencies, folder):
     to_hdf5(gains, frequencies, folder)
     """
     with h5py.File(folder + "/gain_model.h5", "w") as hdf_file:
-        hdf_file.create_dataset("freq (Hz)", data=frequencies * 1e9)
+        hdf_file.create_dataset("freq (Hz)", data=frequencies)
         hdf_file.create_dataset("gain_xpol", data=gains)
 
 
-def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
-                       min_freq=0.070,  # 0.130
-                       channel_bandwidth=0.000012,
-                       channels=3334,
+def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
+                       min_freq=0.075,  # 0.145
+                       channel_bandwidth=0.000125,
+                       channels=160,
                        intended_length=8.0,
                        length_variation=0.00,
-                       atten_skin_effect=False,
-                       atten_conductivity=False,
-                       atten_tangent=False,
-                       atten_thermal=False,
+                       const_atten=0.0,
                        base_temperature=298.15,
+                       temp_variation=0.0,
                        cable_reflections=False,
-                       reflection_order=0,
                        z_l=55,
-                       dc_path='70-100MHz',
+                       z_s=55,
+                       dc_path='130-170MHz',  # '70-110MHz',
                        stations='antenna_pos_core/',
-                       eor=False,
-                       foregrounds=True,
-                       delete_vis=False
+                       eor=True,
+                       foregrounds=False,
+                       delete_vis=False,
+                       calibration=False
                        ):
     """
     Run an OSKAR pipeline simulation.
@@ -86,22 +84,11 @@ def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
         Length of the cable used for the simulation in meters (default is 10.0).
     length_variation: float, optional
         Tolerance for the length of the cable used for the simulation as a percentage (default is 0.00).
-    atten_skin_effect: bool, optional
-        Flag indicating whether attenuation due to the skin effect should be considered (default is False).
-    atten_conductivity: bool, optional
-        Flag indicating whether attenuation due to the dielectric conductivity should be considered (default is False).
-    atten_tangent: bool, optional
-        Flag indicating whether attenuation due to the dielectric tangent should be considered (default is False).
-    atten_thermal: bool, optional
-        Flag indicating whether attenuation due to thermal modification of the skin effect should be considered
-        (default is False).
     base_temperature: float, optional
         Temperature at which attenuation due to the thermal modification of the skin effect should be computed in
         Kelvin (default is 298.15).
     cable_reflections: bool, optional
         Flag indicating whether cable reflections should be considered (default is False).
-    reflection_order: int, optional
-        Order of reflections to compute if cable_reflections is True (default is 0).
     z_l: int, optional
         Load impedance of the cables used for the simulation in ohms (default is 60).
     dc_path: str, optional
@@ -118,7 +105,6 @@ def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
     None
     """
 
-
     # Get datetime of simulation for file indexing.
     date = datetime.now().strftime('%Y%m%d_%H%M%S%f')
 
@@ -127,17 +113,17 @@ def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
     logger.info(f'Client initialised with parameters: \n Max Frequency: {max_freq} \n Min Frequency: {min_freq} \n '
                 f'Channel Bandwidth: {channel_bandwidth} \n Channels: {channels} \n Cable Length: {intended_length}'
                 f' \n Length Tolerance: {length_variation} \n '
-                f'Attenuation Due To The Skin Effect: {atten_skin_effect} \n '
-                f'Attenuation Due To The Dielectric Conductivity: {atten_conductivity} \n '
-                f'Attenuation Due To The Dielectric Tangent: {atten_tangent} \n '
-                f'Attenuation Due To The Thermal Modification Of The Skin Effect: {atten_thermal} \n '
+                f'Attenuation beads in cable (const. atten.): {const_atten} \n '
                 f'Base Temperature: {base_temperature} \n '
+                f'Temperature Max/Min Variation: {temp_variation} \n '
                 f'Cable Reflections: {cable_reflections} \n '
-                f'Reflection Order: {reflection_order} \n '
                 f'Load Impedance: {z_l} \n '
+                f'Path to directory containing the co-moving Mpc in local observable coordinates: {dc_path} \n'
+                f'Station Layout Directory: {stations} \n '
                 f'21cm Cosmological Signal: {eor} \n'
                 f'Foreground Signal: {foregrounds} \n'
                 f'Deleting Visibilities: {delete_vis} \n'
+                f'Calibration: {calibration} \n '
                 )
 
     # Copy ./antenna_pos in order to generate a new telescope model to which gain_models may be applied.
@@ -162,14 +148,12 @@ def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
                                                   channel_bandwidth=channel_bandwidth,
                                                   intended_length=intended_length,
                                                   length_variation=length_variation,
-                                                  atten_skin_effect=atten_skin_effect,
-                                                  atten_conductivity=atten_conductivity,
-                                                  atten_tangent=atten_tangent,
-                                                  atten_thermal=atten_thermal,
+                                                  const_atten=const_atten,
                                                   base_temperature=base_temperature,
+                                                  temp_variation=temp_variation,
                                                   cable_reflections=cable_reflections,
-                                                  reflection_order=reflection_order,
-                                                  z_l=z_l)
+                                                  z_l=z_l,
+                                                  z_s=z_s)
         logger.info(f'Success, the S21 Scattering parameters have been generated.')
     except Exception:
         logger.exception('The following exception was raised: \n')
@@ -178,11 +162,12 @@ def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
     # Save S21 scattering parameters for each telescope to the corresponding station map found in the telescope model.
     try:
         logger.info(f'Saving the S21 parameters for each 512 stations to the telescope model as gain_model.h5 files.')
-        for n in range(244):
+        for n in range(len(os.listdir(date + '_telescope_model')) - 2):
             rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['phasor'].values
             data = []
             [data.append(np.array(rows[i])) for i in range(len(rows))]
-            to_hdf5(list(np.array([np.transpose(data)])), np.arange(min_freq, max_freq, channel_bandwidth),
+            to_hdf5(list(np.array([np.transpose(data)])),
+                    np.arange(min_freq * 1e9, max_freq * 1e9, channel_bandwidth * 1e9),
                     date + '_telescope_model/station' + str(n).rjust(3, '0'))
         logger.info('Success, telescope model now includes antenna gain models in the form of S21 parameters. \n')
     except Exception:
@@ -217,20 +202,33 @@ def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
     try:
         logger.info(f'Plotting the EoR windows for visibilities {date}_vis')
 
-        # Specify control visibility data. Generated using simulation pipeline: all antenna gains = 1+0j.
-        control = dc_path + '_control.vis'
-
         # Create directory to write SKA window plots to.
         result_dir = date + '_results'
         os.mkdir(result_dir)
 
         # Plotting data generated by OSKAR in order to create the EoR windows.
-        plot_eor(control, date + '_vis', result_dir, min_freq, max_freq, channels, channel_bandwidth, dc_path)
-
+        limits, ps_dir, result_dir, delays, baselines = plot_eor(date + '_vis', result_dir, min_freq, max_freq,
+                                                                 channels, channel_bandwidth, dc_path)
         logger.info('Success. \n')
     except Exception:
         logger.exception('The following exception was raised: \n')
         raise
+
+    try:
+        if calibration is True:
+            ps_data = np.load(ps_dir, allow_pickle=True)
+            eor_data = np.load('pipeline_data/EoR_' + dc_path + '_results/Delta_PS.npy', allow_pickle=True)
+            foreground_data = np.load('pipeline_data/Foregrounds_' + dc_path + '_results/Delta_PS.npy',
+                                      allow_pickle=True)
+            foreground_subtracted_ps = np.array(ps_data[0] - foreground_data[0], dtype=object)
+            plot_symlognorm(limits, foreground_subtracted_ps, result_dir + 'eor_diff.png', delays, baselines)
+            np.save(result_dir + 'Foreground_Subtracted_PS.npy', foreground_subtracted_ps)
+
+            eor_diff = np.array(eor_data - foreground_subtracted_ps, dtype=object)
+            plot_symlognorm(limits, eor_diff, result_dir + 'eor_diff.png', delays, baselines)
+            np.save(result_dir + 'EoR_diff_PS.npy', eor_diff, dtype=object)
+    except Exception:
+        logger.exception('The following exception was raised: \n')
 
     # Delete the OSKAR visibilities (approx 40 GB) to free storage space occupied by redundant data.
     if delete_vis is True:
