@@ -49,11 +49,11 @@ def to_hdf5(gains, frequencies, folder):
         hdf_file.create_dataset("gain_xpol", data=gains)
 
 
-def OSKAR_pipeline_run(max_freq=0.1001,
-                       min_freq=0.070,
+def OSKAR_pipeline_run(max_freq=0.11001,  # 0.17001
+                       min_freq=0.070,  # 0.130
                        channel_bandwidth=0.000012,
-                       channels=2509,
-                       intended_length=10.0,
+                       channels=3334,
+                       intended_length=8.0,
                        length_variation=0.00,
                        atten_skin_effect=False,
                        atten_conductivity=False,
@@ -62,8 +62,9 @@ def OSKAR_pipeline_run(max_freq=0.1001,
                        base_temperature=298.15,
                        cable_reflections=False,
                        reflection_order=0,
-                       z_l=60,
+                       z_l=55,
                        dc_path='70-100MHz',
+                       stations='antenna_pos_core/',
                        eor=False,
                        foregrounds=True,
                        delete_vis=False
@@ -145,7 +146,7 @@ def OSKAR_pipeline_run(max_freq=0.1001,
 
         # Create temp dir copy of antenna pos + gains
         telescope_dir = date + '_telescope_model/'
-        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos_core/', telescope_dir)
+        shutil.copytree('SKA_Power_Spectrum_and_EoR_Window/End2End/' + stations, telescope_dir)
 
         logger.info(f'Success, the telescope model was created: {telescope_dir}.\n')
     except Exception:

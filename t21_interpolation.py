@@ -306,7 +306,7 @@ def main():
     z_values = range(6, 49)  # redshift integer z from 21cm simulations
     N_z = len(z_values)
     min_freq = 70
-    max_freq = 100.1
+    max_freq = 110.01
     channel_bandwidth = 0.0120
 
     """
