@@ -7,28 +7,30 @@ from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import get_cosmologi
 from SKA_Power_Spectrum_and_EoR_Window.sky_map.gsm_gleam import composite_map
 
 
-def get_start_time(ra0_deg, length_sec):
+def get_start_time(ra0_deg, observation_start_time_utc, observation_length_sec):
     """Calculate the optimal start time for a given field RA and observation length.
 
     Parameters
     ----------
     ra0_deg : float
         The right ascension of the target field, in degrees.
-    length_sec : float
+    observation_length_sec : float
         The length of the observation, in seconds.
 
     Returns
     -------
     float: The optimal start time for the observation, in UTC format.
     """
-    t = Time('2000-01-01 00:00:00', scale='utc', location=('116.764d', '0d'))
+    t = Time(observation_start_time_utc, scale='utc', location=('116.764d', '0d'))
     dt_hours = (24.0 - t.sidereal_time('apparent').hour) / 1.0027379
     dt_hours += (ra0_deg / 15.0)
-    start = t + TimeDelta(dt_hours * 3600.0 - length_sec / 2.0, format='sec')
+    start = t + TimeDelta(dt_hours * 3600.0 - observation_length_sec / 2.0, format='sec')
     return start.value
 
 
-def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False, foregrounds=True, dc_path=None):
+def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, observation_start_time_utc,
+              observation_length_sec, observation_num_time_steps, eor=False, foregrounds=True, dc_path=None,
+              oskar_binary=True):
     """Run a simulation of an interferometer telescope with a GLEAM sky model.
 
     Parameters
@@ -54,9 +56,7 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False
     """
     import oskar
     # Telescope and observation parameters.
-    ra0_deg = 60.0
-    dec0_deg = -30.0
-    length_sec = 0.0
+
     start_frequency_hz = min_freq * 1e9
     frequency_inc_hz = channel_bandwidth * 1e9
     num_channels = channels
@@ -83,9 +83,9 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False
             "observation/start_frequency_hz": frequency_hz,
             "observation/phase_centre_ra_deg": ra0_deg,
             "observation/phase_centre_dec_deg": dec0_deg,
-            "observation/num_time_steps": 1,
-            "observation/start_time_utc": get_start_time(ra0_deg, length_sec),
-            "observation/length": length_sec,
+            "observation/num_time_steps": observation_num_time_steps,
+            "observation/start_time_utc": get_start_time(ra0_deg, observation_start_time_utc, observation_length_sec),
+            "observation/length": observation_length_sec,
             "telescope/input_directory": date + '_telescope_model',
             "telescope/normalise_beams_at_phase_centre": False,
             "telescope/aperture_array/array_pattern/normalise": True,
@@ -96,17 +96,21 @@ def run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor=False
             "interferometer/time_average_sec": 0.9,
         }
 
-        cosmo = get_cosmological_model()
-        pixel_size_deg = get_pixel_size(z=(1420.0e6 / (frequency_hz / 1e6) - 1), model=cosmo).value
+        if eor is True:
+            cosmo = get_cosmological_model()
+            pixel_size_deg = get_pixel_size(z=(1420.0e6 / (frequency_hz / 1e6) - 1), model=cosmo).value
 
-        params["interferometer/uv_filter_min"] = 1.0 / math.radians(float(pixel_size_deg) * 512)
-        params["interferometer/uv_filter_max"] = 1.0 / (2.0 * math.radians(float(pixel_size_deg)))
+            params["interferometer/uv_filter_min"] = 1.0 / math.radians(float(pixel_size_deg) * 512)
+            params["interferometer/uv_filter_max"] = 1.0 / (2.0 * math.radians(float(pixel_size_deg)))
 
         settings_sim = oskar.SettingsTree("oskar_sim_interferometer")
         settings_sim.from_dict(params)
 
         # Run simulation.
-        settings_sim["interferometer/oskar_vis_filename"] = date + '_vis/' + root_name + ".vis"
+        if oskar_binary is True:
+            settings_sim["interferometer/oskar_vis_filename"] = date + '_vis/' + root_name + ".vis"
+        else:
+            settings_sim["interferometer/ms_filename"] = date + '_vis/' + root_name + ".ms"
         sim = oskar.Interferometer(settings=settings_sim)
         sim.set_sky_model(composite_sky_model)
         sim.run()

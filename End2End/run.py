@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from SKA_Power_Spectrum_and_EoR_Window.End2End.Coaxial_Transmission import compute_interferometer_s21
-from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_oskar_gleam_model
+from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_oskar
 from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import plot_eor
 from SKA_Power_Spectrum_and_EoR_Window.End2End.logger import init_logger
 
@@ -48,10 +48,19 @@ def to_hdf5(gains, frequencies, folder):
         hdf_file.create_dataset("gain_xpol", data=gains)
 
 
-def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
-                       min_freq=0.075,  # 0.145
+def OSKAR_pipeline_run(max_freq=0.165,
+                       min_freq=0.145,
                        channel_bandwidth=0.000125,
                        channels=160,
+                       ra0_deg=60.0,
+                       dec0_deg=-30.0,
+
+                       stations='antenna_pos_core/',
+
+                       observation_start_time_utc='2000-01-01 00:00:00',
+                       observation_length_sec=0.0,
+                       observation_num_time_steps=1,
+
                        intended_length=8.0,
                        length_variation=0.00,
                        const_atten=0.0,
@@ -60,12 +69,13 @@ def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
                        cable_reflections=False,
                        z_l=55,
                        z_s=55,
-                       dc_path='130-170MHz',  # '70-110MHz',
-                       stations='antenna_pos_core/',
+
                        eor=True,
+                       dc_path='135-165MHz',  # '70-110MHz',
                        foregrounds=False,
+
                        delete_vis=False,
-                       calibration=False
+                       oskar_binary=True
                        ):
     """
     Run an OSKAR pipeline simulation.
@@ -123,7 +133,6 @@ def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
                 f'21cm Cosmological Signal: {eor} \n'
                 f'Foreground Signal: {foregrounds} \n'
                 f'Deleting Visibilities: {delete_vis} \n'
-                f'Calibration: {calibration} \n '
                 )
 
     # Copy ./antenna_pos in order to generate a new telescope model to which gain_models may be applied.
@@ -153,7 +162,8 @@ def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
                                                   temp_variation=temp_variation,
                                                   cable_reflections=cable_reflections,
                                                   z_l=z_l,
-                                                  z_s=z_s)
+                                                  z_s=z_s,
+                                                  stations=stations)
         logger.info(f'Success, the S21 Scattering parameters have been generated.')
     except Exception:
         logger.exception('The following exception was raised: \n')
@@ -161,8 +171,8 @@ def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
 
     # Save S21 scattering parameters for each telescope to the corresponding station map found in the telescope model.
     try:
-        logger.info(f'Saving the S21 parameters for each 512 stations to the telescope model as gain_model.h5 files.')
-        for n in range(len(os.listdir(date + '_telescope_model')) - 2):
+        logger.info(f'Saving the S21 parameters for each station to the telescope model as gain_model.h5 files.')
+        for n in range(len(os.listdir(telescope_dir)) - 2):
             rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['phasor'].values
             data = []
             [data.append(np.array(rows[i])) for i in range(len(rows))]
@@ -179,7 +189,8 @@ def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
         logger.info('Running OSKAR interferometer simulations with the given telescope model.')
 
         # Run OSKAR for the generated telescope model.
-        run_oskar_gleam_model(date, min_freq, channels, channel_bandwidth, eor, foregrounds, dc_path)
+        run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, observation_start_time_utc,
+                  observation_length_sec, observation_num_time_steps, eor, foregrounds, dc_path, oskar_binary)
 
         logger.info(f'Success, OSKAR visibilities have been generated to {date}_vis. \n')
     except Exception:
@@ -198,37 +209,34 @@ def OSKAR_pipeline_run(max_freq=0.095,  # 0.165
         logger.exception('The following exception was raised: \n')
         raise
 
-    # Plotting the EoR window plots using the control.ms and the newly generated visibilities.
+    # Delete sky map folder for clean-up.
     try:
-        logger.info(f'Plotting the EoR windows for visibilities {date}_vis')
+        logger.info(f'Deleting used sky model: {date}_sky_maps/.')
 
-        # Create directory to write SKA window plots to.
-        result_dir = date + '_results'
-        os.mkdir(result_dir)
+        # Removing telescope model to conserve storage space.
+        shutil.rmtree(date + '_sky_maps/')
 
-        # Plotting data generated by OSKAR in order to create the EoR windows.
-        limits, ps_dir, result_dir, delays, baselines = plot_eor(date + '_vis', result_dir, min_freq, max_freq,
-                                                                 channels, channel_bandwidth, dc_path)
         logger.info('Success. \n')
     except Exception:
         logger.exception('The following exception was raised: \n')
         raise
 
-    try:
-        if calibration is True:
-            ps_data = np.load(ps_dir, allow_pickle=True)
-            eor_data = np.load('pipeline_data/EoR_' + dc_path + '_results/Delta_PS.npy', allow_pickle=True)
-            foreground_data = np.load('pipeline_data/Foregrounds_' + dc_path + '_results/Delta_PS.npy',
-                                      allow_pickle=True)
-            foreground_subtracted_ps = np.array(ps_data[0] - foreground_data[0], dtype=object)
-            plot_symlognorm(limits, foreground_subtracted_ps, result_dir + 'eor_diff.png', delays, baselines)
-            np.save(result_dir + 'Foreground_Subtracted_PS.npy', foreground_subtracted_ps)
+    # Plotting the EoR window plots using the control.ms and the newly generated visibilities.
+    if oskar_binary is True:
+        try:
+            logger.info(f'Plotting the EoR windows for visibilities {date}_vis')
 
-            eor_diff = np.array(eor_data - foreground_subtracted_ps, dtype=object)
-            plot_symlognorm(limits, eor_diff, result_dir + 'eor_diff.png', delays, baselines)
-            np.save(result_dir + 'EoR_diff_PS.npy', eor_diff, dtype=object)
-    except Exception:
-        logger.exception('The following exception was raised: \n')
+            # Create directory to write SKA window plots to.
+            result_dir = date + '_results'
+            os.mkdir(result_dir)
+
+            # Plotting data generated by OSKAR in order to create the EoR windows.
+            plot_eor(date + '_vis', result_dir, min_freq, max_freq, channels, channel_bandwidth,
+                     observation_num_time_steps)
+            logger.info('Success. \n')
+        except Exception:
+            logger.exception('The following exception was raised: \n')
+            raise
 
     # Delete the OSKAR visibilities (approx 40 GB) to free storage space occupied by redundant data.
     if delete_vis is True:

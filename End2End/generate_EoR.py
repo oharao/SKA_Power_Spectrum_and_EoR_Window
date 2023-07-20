@@ -18,7 +18,7 @@ from scipy.signal import windows
 
 
 # take in freq in Hz
-def delay_transform(name1, name2, filepath, row, N, freq_values, channels, baseline_mag, control=False):
+def delay_transform(name1, name2, filepath, N, freq_values, channels, baseline_mag, control=False):
     """
     Performs a delay transform on visibility data at a given frequency.
 
@@ -53,7 +53,10 @@ def delay_transform(name1, name2, filepath, row, N, freq_values, channels, basel
         for i in range(header.num_blocks):
             block.read(header, handle, i)
             vis = block.cross_correlations()
-            vis_data[k, :] = (vis[row, 0])[:, 0][baseline_mag.argsort()]
+            vis_data[k, :] = vis[0, 0, :, 0][baseline_mag.argsort()]
+
+    # Account for the summation across time samples.
+    vis_data = vis_data / header.num_blocks
 
     window_vector = windows.blackmanharris(channels) ** 2
     window_array = np.tile(window_vector, (len(vis_data[0]), 1)).T
@@ -312,7 +315,7 @@ def get_delta_Dc_values(delta_Dc_file):
     return delta_Dc_values
 
 
-def get_Pd_avg_unfolded_binning(name1: str, name2: str, filepath: str, N_baselines: int,
+def get_Pd_avg_unfolded_binning(name1: str, name2: str, filepath: str,
                                 freq_values: np.ndarray, freq_interval: float, channels: int, time_samples: int,
                                 Dc: np.ndarray, delta_Dc: np.ndarray, wavelength: np.ndarray, z: float,
                                 N_bins: int) -> np.ndarray:
@@ -365,21 +368,19 @@ def get_Pd_avg_unfolded_binning(name1: str, name2: str, filepath: str, N_baselin
 
     sum_sorted_vis = np.zeros([len(sorted_delay_values), N_bins])
 
-    # compute the power delay spectrum for each time sample
-    for j in np.arange(time_samples):
-        delay_data = delay_transform(name1, name2, filepath, j * N_baselines, N_baselines, freq_values,
-                                     channels, baseline_mag)
+    delay_data = delay_transform(name1, name2, filepath, len(baseline_mag), freq_values,
+                                 channels, baseline_mag)
 
-        vis_delay = np.abs(delay_data) ** 2  # get modulus squared
+    vis_delay = np.abs(delay_data) ** 2  # get modulus squared
 
-        # sort by delay values
-        sorted_vis_delay = vis_delay[delay_values.argsort(), :]
+    # sort by delay values
+    sorted_vis_delay = vis_delay[delay_values.argsort(), :]
 
-        sorted_vis_delay_bins = np.zeros([channels, N_bins])
-        for q in range(N_bins):
-            if vis_position[q] != vis_position[q + 1]:
-                sorted_vis_delay_bins[:, q] = np.sum(sorted_vis_delay[:, vis_position[q]:vis_position[q + 1] - 1],
-                                                     axis=-1) / (vis_position[q + 1] - vis_position[q])
+    sorted_vis_delay_bins = np.zeros([channels, N_bins])
+    for q in range(N_bins):
+        if vis_position[q] != vis_position[q + 1]:
+            sorted_vis_delay_bins[:, q] = np.sum(sorted_vis_delay[:, vis_position[q]:vis_position[q + 1] - 1],
+                                                 axis=-1) / (vis_position[q + 1] - vis_position[q])
 
         sum_sorted_vis = sum_sorted_vis + sorted_vis_delay_bins
 
@@ -498,7 +499,7 @@ def plot_lognorm(limits, gleam, name, delay, baselines, vmax=1e12, vmin=1e-8, cm
     ax1.set_ylabel('$k_\parallel [h Mpc^{-1}]$')
 
     ax1.plot(horizon_limit_x, horizon_limit_y, color='black')
-    ax1.plot(horizon_limit_x, horizon_limit_y + 0.1, color='black')
+    ax1.plot(horizon_limit_x, horizon_limit_y + 0.1, color='black', linestyle='dotted')
     ax1.plot(horizon_limit_x, beam_limit_y, color='black', linestyle='dashed')
     ax1.plot(horizon_limit_x, horizon_limit_y_neg, color='black')
     ax1.plot(horizon_limit_x, beam_limit_y_neg, color='black', linestyle='dashed')
@@ -551,7 +552,7 @@ def plot_lognorm(limits, gleam, name, delay, baselines, vmax=1e12, vmin=1e-8, cm
     plt.savefig(name, bbox_inches='tight')
 
 
-def plot_eor(filepath, output_dir, min_freq, max_freq, channels, channel_bandwidth, dc_path):
+def plot_eor(filepath, output_dir, min_freq, max_freq, channels, channel_bandwidth, observation_num_time_steps):
     """
     Plot the Epoch of Reionization (EoR) power spectrum and window.
 
@@ -597,14 +598,11 @@ def plot_eor(filepath, output_dir, min_freq, max_freq, channels, channel_bandwid
     Dc_values = get_dc(freq=freq_values, model=cosmo).value
     delta_Dc_values = get_delta_dc(freq=freq_values, bandwidth=freq_interval, model=cosmo).value
 
-    # now try one channel only, can probably loop over other channels later
-    time_samples = 1  # 40  # number of time samples to mod average over
-    N_baselines = 24976  # 130816
     N_bins = 250
 
     gleam, delays, baselines = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath,
-                                                           N_baselines, freq_values, freq_interval,
-                                                           channels, time_samples, Dc_values,
+                                                           freq_values, freq_interval,
+                                                           channels, observation_num_time_steps, Dc_values,
                                                            delta_Dc_values, wavelength_values, z_values,
                                                            N_bins)
 

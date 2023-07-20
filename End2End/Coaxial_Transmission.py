@@ -371,7 +371,7 @@ def polar_to_cart(rho, phi):  # meters, degrees
     return [x, y]
 
 
-def get_antenna_pos():
+def get_antenna_pos(stations):
     """Returns the positions of the SKA antennas in the reference frame of the SKA core.
 
     Returns
@@ -379,7 +379,7 @@ def get_antenna_pos():
         pandas.DataFrame: DataFrame containing the station index and the Cartesian coordinates [x, y] of each antenna.
     """
     centre = [116.7644482, -26.82472208]  # lat , lon
-    station_pos = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos_core/layout_wgs84.txt',
+    station_pos = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/' + stations + 'layout_wgs84.txt',
                               header=None, names=["latitude", "longitude"])
     station_pos['lat_rel'] = (station_pos['latitude'] - centre[0])
     station_pos['lon_rel'] = (station_pos['longitude'] - centre[1])
@@ -389,7 +389,7 @@ def get_antenna_pos():
 
     antenna_info = pd.DataFrame(columns=['station', 'x', 'y'])
     for i, x, y in zip(range(len(station_pos['lat_rel'])), station_pos['x'], station_pos['y']):
-        df = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/antenna_pos/station' +
+        df = pd.read_csv('SKA_Power_Spectrum_and_EoR_Window/End2End/' + stations + 'station' +
                          str(i).rjust(3, '0') + '/layout.txt', header=None,
                          names=["delta_x", "delta_y"])
         df['delta_x'], df['delta_y'] = df['delta_x'] + x, df['delta_y'] + y
@@ -436,7 +436,7 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
 
 
 def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
-                               const_atten, base_temperature, temp_variation, cable_reflections, z_l, z_s):
+                               const_atten, base_temperature, temp_variation, cable_reflections, z_l, z_s, stations):
     """
     Compute the S21 signal for a radio interferometer system.
 
@@ -469,7 +469,7 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
         A pandas DataFrame containing information about the antennas in the system, including their positions,
         cable lengths, delta temperatures, and S21 phasors.
     """
-    antenna_info = get_antenna_pos()
+    antenna_info = get_antenna_pos(stations)
 
     world = perlin_noise_map() * temp_variation
 
