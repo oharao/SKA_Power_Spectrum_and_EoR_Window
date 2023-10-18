@@ -13,7 +13,7 @@ class cable_decay:
     """
 
     def __init__(self, max_freq, min_freq, channels, channel_bandwidth, a, b, c, rho_in, rho_out, mu_in, mu_out,
-                 roughness, eps_dielectric, rho_dielectric, mu_dielectric, tcr_in, tcr_out, z_l, z_s):
+                 roughness, eps_dielectric, rho_dielectric, mu_dielectric, tcr_in, tcr_out, z_ref):
         """
         Initializes the cable_decay class.
 
@@ -35,8 +35,7 @@ class cable_decay:
             - mu_dielectric (float): Dielectric permeability (H/m).
             - tcr_in (float): Temperature coefficient of resistance for the inner conductor.
             - tcr_out (float): Temperature coefficient of resistance for the outer conductor.
-            - z_l (complex): Load impedance (Ohm).
-            - z_s (complex): Source impedance (Ohm).
+            - z_ref (complex): Refrence impedance (Ohm).
         """
 
         self.max_freq = max_freq * 10 ** 9  # Convert GHz to Hz.
@@ -60,8 +59,7 @@ class cable_decay:
         self.tcr_in = tcr_in
         self.tcr_out = tcr_out
 
-        self.z_l = z_l
-        self.z_s = z_s
+        self.z_ref = z_ref
 
         # Create all frequency & wavelengths for calculations.
         self.frequencies = np.arange(self.min_freq, self.max_freq, self.channel_bandwidth)  # Hz.
@@ -183,108 +181,7 @@ class cable_decay:
                 self.conductance + 1j * self.angular_frequencies * self.capacitance))
         return self.z_0
 
-    def get_refl_l(self):
-        """
-        Calculate the reflection coefficient of the load connected to a transmission line.
-
-        Returns:
-        refl_l (float): The reflection coefficient of the load.
-
-        Parameters:
-        self (object): The object representing the transmission line.
-        self.z_l (float): The impedance of the load.
-        self.z_0 (float): The characteristic impedance of the transmission line.
-        """
-        self.refl_l = (self.z_l - self.z_0) / (self.z_l + self.z_0)
-        return self.refl_l
-
-    def get_refl_s(self):
-        """
-        Calculate the reflection coefficient of the source connected to a transmission line.
-
-        Returns:
-        refl_s (float): The reflection coefficient of the source.
-
-        Parameters:
-        self (object): The object representing the transmission line.
-        self.z_s (float): The impedance of the source.
-        self.z_0 (float): The characteristic impedance of the transmission line.
-        """
-        self.refl_s = (self.z_s - self.z_0) / (self.z_s + self.z_0)
-        return self.refl_s
-
-    def refl(self, length, z=0):
-        """
-        Calculates the reflection coefficient for a transmission line of a given length.
-
-        Parameters:
-        -----------
-        length: float
-            Length of the transmission line.
-
-        Returns:
-        --------
-        float
-            The reflection coefficient for the given transmission line length.
-        """
-        return self.refl_l * np.exp(2 * self.gamma * (z - length))
-
-    def z_input(self, length, z=0):
-        """
-        Calculates the input impedance of the transmission line at a given length.
-
-        Parameters:
-        -----------
-        length: float
-            Length of the transmission line.
-
-        Returns:
-        --------
-        complex
-            The input impedance of the transmission line at the given length.
-        """
-        self.z_in = self.z_0 * np.divide(self.z_l + self.z_0 * np.tan(self.gamma * (length - z)),
-                                         self.z_0 + self.z_l * np.tan(self.gamma * (length - z)))
-        return self.z_in
-
-    def V_0_p(self, length, V_g=complex(1 + 0j)):
-        """
-        Calculates the voltage at the load end of the transmission line for a given input voltage and line length.
-
-        Parameters:
-        -----------
-        length: float
-            Length of the transmission line.
-        V_g: complex, optional (default = 1+0j)
-            The input voltage of the transmission line. If not specified, a default value of 1+0j is used.
-
-        Returns:
-        --------
-        complex
-            The voltage at the load end of the transmission line for the given input voltage and line length.
-        """
-        return V_g * np.exp(-self.gamma * length) * self.z_0 / (
-                self.z_0 * (1 + self.refl(length)) + self.z_s * (1 - self.refl(length)))
-
-    def V_p(self, length, z=0, atten_bead=0.0):
-        """
-        Calculates the voltage at the end of a coaxial cable of a given length with an optional attenuation value.
-
-        Args:
-        length (float): The length of the cable in meters.
-        n (int, optional): The number of reflections to consider. Defaults to 3.
-        atten_bead (float, optional): The attenuation value in dB. Defaults to 0.0.
-
-        Returns:
-        complex: The voltage at the end of the cable.
-        """
-        # atten_bead is the power gain in db ie. 10 Log(k) where k is a percentage.
-        power_gain = 10 ** (atten_bead / 10)
-
-        output = self.V_0_p(length) * np.exp(-self.gamma * z) * (1 - self.refl_l)
-        return output * 1 / (self.z_0 / (self.z_0 + self.z_l)) * power_gain
-
-    def get_S21(self, length, temp=293.15, atten_bead=0.0, cable_reflections=True):
+    def get_S21(self, length, temp):
         """
         Calculates the S21 response for a given coaxial cable length, temperature, number of reflections, and attenuation value.
 
@@ -298,19 +195,40 @@ class cable_decay:
         Returns:
         complex: The S21 response.
         """
-        if cable_reflections is True:
-            self.get_resistance(temp)
-            self.coax_impedence()
-            self.propagation_const()
-            self.get_refl_l()
-            self.get_refl_s()
 
-            self.z_input(length)
-            self.V_0_p(length)
+        self.get_resistance(temp)
+        self.coax_impedence()
+        self.propagation_const()
 
-            return self.V_p(length, atten_bead)
-        else:
-            return np.zeros_like(self.frequencies) + complex(1, 0) * 10 ** (atten_bead / 10)
+        S_11 = np.divide((self.z_0 ** 2 - self.z_ref ** 2) * np.sinh(self.gamma * length),
+                         (self.z_0 ** 2 + self.z_ref ** 2) * np.sinh(
+                             self.gamma * length) + 2 * self.z_ref * self.z_0 * np.cosh(self.gamma * length))
+        S_22 = S_11
+
+        S_12 = np.divide(2 * self.z_ref * self.z_0,
+                         (self.z_0 ** 2 + self.z_ref ** 2) * np.sinh(
+                             self.gamma * length) + 2 * self.z_ref * self.z_0 * np.cosh(self.gamma * length))
+        S_21 = S_12
+        return S_11, S_12, S_21, S_22
+
+    def get_gain(self, length, temp=293.15):
+        """
+        Calculates the voltage at the end of a coaxial cable of a given length with an optional attenuation value.
+
+        Args:
+        length (float): The length of the cable in meters.
+        n (int, optional): The number of reflections to consider. Defaults to 3.
+        atten_bead (float, optional): The attenuation value in dB. Defaults to 0.0.
+
+        Returns:
+        complex: The voltage at the end of the cable.
+        """
+
+        S_11, S_12, S_21, S_22 = self.get_S21(length=length, temp=temp)
+
+        # Complex Linear Gain
+        gain = np.abs(S_21)
+        return gain
 
 
 def equirectangular_approx(lat1, lon1, lat2, lon2):
@@ -436,7 +354,7 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
 
 
 def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
-                               const_atten, base_temperature, temp_variation, cable_reflections, z_l, z_s, stations):
+                               const_atten, base_temperature, temp_variation, cable_reflections, z_ref, stations):
     """
     Compute the S21 signal for a radio interferometer system.
 
@@ -477,7 +395,7 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
     ska = cable_decay(max_freq=max_freq, min_freq=min_freq, channels=channels, channel_bandwidth=channel_bandwidth,
                       a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.71e-8, rho_out=1.71e-8,
                       mu_in=1.0, mu_out=1.0, roughness=0.0, eps_dielectric=2.12, rho_dielectric=1e18,
-                      mu_dielectric=1, tcr_in=0.00404, tcr_out=0.00404, z_l=z_l, z_s=z_s)
+                      mu_dielectric=1, tcr_in=0.00404, tcr_out=0.00404, z_ref=53.184)
 
     antenna_info['cable_length'] = np.random.normal(intended_length, intended_length * length_variation,
                                                     len(antenna_info.index))

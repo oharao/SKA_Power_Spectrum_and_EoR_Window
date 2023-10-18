@@ -67,8 +67,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
                        base_temperature=298.15,
                        temp_variation=0.0,
                        cable_reflections=False,
-                       z_l=55,
-                       z_s=55,
+                       z_ref=55,
 
                        eor=True,
                        dc_path='135-165MHz',  # '70-110MHz',
@@ -127,7 +126,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
                 f'Base Temperature: {base_temperature} \n '
                 f'Temperature Max/Min Variation: {temp_variation} \n '
                 f'Cable Reflections: {cable_reflections} \n '
-                f'Load Impedance: {z_l} \n '
+                f'Ref Impedance: {z_ref} \n '
                 f'Path to directory containing the co-moving Mpc in local observable coordinates: {dc_path} \n'
                 f'Station Layout Directory: {stations} \n '
                 f'21cm Cosmological Signal: {eor} \n'
@@ -161,8 +160,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
                                                   base_temperature=base_temperature,
                                                   temp_variation=temp_variation,
                                                   cable_reflections=cable_reflections,
-                                                  z_l=z_l,
-                                                  z_s=z_s,
+                                                  z_ref=z_ref,
                                                   stations=stations)
         logger.info(f'Success, the S21 Scattering parameters have been generated.')
     except Exception:

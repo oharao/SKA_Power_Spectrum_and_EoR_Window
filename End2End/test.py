@@ -4,20 +4,18 @@ import os
 from generate_EoR import plot_eor
 import numpy as np
 
-max_freq = 0.165  # GHz (0.1000852)
-min_freq = 0.155  # GHz
-channel_bandwidth = 0.000125
-channels = 80
+max_freq = 0.265  # GHz (0.1000852)
+min_freq = 0.215  # GHz
+channel_bandwidth = 0.0001098
+channels = 456
 
-observation_num_time_steps = 2
+observation_num_time_steps = 1
 
 z_l = 55
 dc_path = '130-170MHz'
-stations = 'antenna_pos_core/'
+stations = 'antenna_pos/'
 
-date = 'Paper_Results/Foreground_145-165'
-date = 'Paper_Results/EoR_145-165'
-date = '20230720_160805258736'
+date = '20230901_135406360424'
 #os.mkdir(date + '_results')
 
 

@@ -446,7 +446,7 @@ def get_limits(signal, Dc_values, z_values, wavelength_values, fov_angle):
     return horizon_limit_x, horizon_limit_y, horizon_limit_y_neg, beam_limit_y, beam_limit_y_neg
 
 
-def plot_lognorm(limits, gleam, name, delay, baselines, vmax=1e12, vmin=1e-8, cmap='gnuplot'):
+def plot_lognorm(limits, gleam, name, delay, baselines, vmax=1e14, vmin=1e-8, cmap='gnuplot'):
     """
     Plot a logarithmic scale color map of a signal in k-space, along with white and black contours that represent the horizon and beam limits, respectively.
 
