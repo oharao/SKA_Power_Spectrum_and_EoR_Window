@@ -1,3 +1,15 @@
+"""
+This script implements a parametric model to account for the effects of a coaxial transmission line and on the
+scattering parameters in terms of the cables bulk material parameters. This code is consistent with numerical simulation
+ran in CST cable studio to within 5%.
+
+@author:
+    Oscar Sage David O'Hara
+@email:
+    osdo2@cam.ac.uk
+"""
+
+
 import noise
 import numpy as np
 import pandas as pd

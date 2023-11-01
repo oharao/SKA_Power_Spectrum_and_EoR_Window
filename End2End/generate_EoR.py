@@ -1,6 +1,10 @@
 """
-blocks means binning
-reduced refers to attempt at averging abs(v^2) over the +ve/-ve delay
+Functions plot the per-baseline delay power spectrum for the natural visibilities generated using OSKAR.
+
+@author:
+    Oscar Sage David O'Hara
+@email:
+    osdo2@cam.ac.uk
 """
 
 import csv

@@ -1,3 +1,14 @@
+"""
+Read and construct a composite healpy sky model, using GSM, GLEAM, HASLAM 408 and a semi-numerical 21-cm signal.
+Included are function to broaden the healpix diffuse emmission to potentially decrease computational complexity.
+
+@author:
+    Oscar Sage David O'Hara
+@email:
+    osdo2@cam.ac.uk
+"""
+
+
 import os
 
 import astropy.units as u
@@ -7,8 +18,6 @@ import oskar
 
 from astropy.io import fits
 from pygdsm import HaslamSkyModel, GlobalSkyModel16
-
-from SKA_Power_Spectrum_and_EoR_Window.End2End.sky_map.read_gleam import gleam
 
 
 def gleam():

@@ -1,3 +1,15 @@
+"""
+The functions within intialise an observation using the outlined End-to-End Simulation Pipeline for SKA-LOW. This
+piepline  is based on the Oxford Square Kilometre Array Simulator using a composite sky model that combines radio
+foregrounds from The Galactic and Extragalactic All-Sky MWA Survey, Haslam 408MHz, and a simulated 1.5Gpc 21-cm
+brightness temperature cube generated via a semi-numerical code.
+
+@author:
+    Oscar Sage David O'Hara
+@email:
+    osdo2@cam.ac.uk
+"""
+
 import os
 import shutil
 from datetime import datetime

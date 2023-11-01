@@ -1,3 +1,14 @@
+"""
+Functions which are used to configure and run oskarpy, a python integration of OSKAR. Calculation of the optimal start
+time for a given right accession and declination. OSKAR settings, including the construction of the telescope and sky
+model.
+
+@author:
+    Oscar Sage David O'Hara
+@email:
+    osdo2@cam.ac.uk
+"""
+
 import math
 import os
 
@@ -43,12 +54,26 @@ def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, ob
         The number of frequency channels to simulate.
     channel_bandwidth : float
         The bandwidth of each frequency channel in GHz.
+    ra0_deg : float
+        Right Accession of phase center.
+    dec0_deg : float
+        Declination of phase center.
+    observation_start_time_utc : datetime.datetime
+        The start time for the observation, in UTC format.
+    observation_length_sec : float
+        The length of the observation, in seconds.
+    observation_num_time_steps : int
+        The number of time steps to be taken.
     eor : bool
         Whether to include EoR signal in the simulation (default False).
     foregrounds : bool
         Whether to include foregrounds in the simulation (default True).
+    gaussian_shape : bool
+        Turn on Gaussian Broadening of diffuse sources.
     dc_path : str
         The path to the data cube for the EoR signal (default None).
+    oskar_binary : bool
+        Should the data be saved as oskar binary files or measurement sets.
 
     Returns
     -------

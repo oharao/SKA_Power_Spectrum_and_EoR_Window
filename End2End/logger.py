@@ -4,7 +4,7 @@ logging format and removes "spam" entries diluting key information.
 @author:
     Oscar Sage David O'Hara
 @email:
-    oharao@tcd.ie
+    osdo2@cam.ac.uk
 """
 
 import logging
