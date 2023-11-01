@@ -2,6 +2,8 @@ import noise
 import numpy as np
 import pandas as pd
 import scipy.constants as const
+import skrf as rf
+from skrf import Network, Frequency
 
 
 class cable_decay:
@@ -13,7 +15,7 @@ class cable_decay:
     """
 
     def __init__(self, max_freq, min_freq, channels, channel_bandwidth, a, b, c, rho_in, rho_out, mu_in, mu_out,
-                 roughness, eps_dielectric, rho_dielectric, mu_dielectric, tcr_in, tcr_out, z_ref):
+                 roughness, eps_dielectric, rho_dielectric, mu_dielectric, tcr_in, tcr_out, z_ref, s_s, s_l):
         """
         Initializes the cable_decay class.
 
@@ -60,6 +62,8 @@ class cable_decay:
         self.tcr_out = tcr_out
 
         self.z_ref = z_ref
+        self.s_s = s_s
+        self.s_l = s_l
 
         # Create all frequency & wavelengths for calculations.
         self.frequencies = np.arange(self.min_freq, self.max_freq, self.channel_bandwidth)  # Hz.
@@ -226,8 +230,21 @@ class cable_decay:
 
         S_11, S_12, S_21, S_22 = self.get_S21(length=length, temp=temp)
 
-        # Complex Linear Gain
-        gain = np.abs(S_21)
+        if self.s_s and self.s_l is not None:
+            s = np.transpose(np.array([[S_11, S_12], [S_21, S_22]]), (2, 0, 1))
+
+            freq = Frequency.from_f(self.frequencies, 'mhz')
+
+            ntwk_s = Network(frequency=freq, s=self.s_s, z0=self.z_ref, name='Source 2-port')
+            ntwk_0 = Network(frequency=freq, s=s, z0=self.z_ref, name='Coaxial Transmission Line 2-port')
+            ntwk_l = Network(frequency=freq, s=self.s_l, z0=self.z_ref, name='Load 2-port')
+
+            ntwk = rf.cascade_list([ntwk_s, ntwk_0, ntwk_l])
+
+            # Complex Linear Gain
+            gain = np.transpose(ntwk.s, (1, 2, 0))[1, 0, :]
+        else:
+            gain = np.abs(S_21)
         return gain
 
 
@@ -354,7 +371,7 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
 
 
 def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
-                               const_atten, base_temperature, temp_variation, cable_reflections, z_ref, stations):
+                               base_temperature, temp_variation, z_ref, s_s, s_l, stations):
     """
     Compute the S21 signal for a radio interferometer system.
 
@@ -395,7 +412,7 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
     ska = cable_decay(max_freq=max_freq, min_freq=min_freq, channels=channels, channel_bandwidth=channel_bandwidth,
                       a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.71e-8, rho_out=1.71e-8,
                       mu_in=1.0, mu_out=1.0, roughness=0.0, eps_dielectric=2.12, rho_dielectric=1e18,
-                      mu_dielectric=1, tcr_in=0.00404, tcr_out=0.00404, z_ref=53.184)
+                      mu_dielectric=1, tcr_in=0.00404, tcr_out=0.00404, z_ref=z_ref, s_s=s_s, s_l=s_l)
 
     antenna_info['cable_length'] = np.random.normal(intended_length, intended_length * length_variation,
                                                     len(antenna_info.index))
@@ -404,7 +421,6 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
     antenna_info['delta_t'] = [base_temperature + world[round((x / 40000) * shape[0] / 2 + shape[0] / 2)][
         round((y / 40000) * shape[1] / 2 + shape[1] / 2)] for x, y in zip(antenna_info['x'], antenna_info['y'])]
 
-    antenna_info['phasor'] = [ska.get_S21(l, dt, cable_reflections=cable_reflections,
-                                          atten_bead=const_atten) for l, dt in
+    antenna_info['phasor'] = [ska.get_gain(l, dt) for l, dt in
                               zip(antenna_info['cable_length'], antenna_info['delta_t'])]
     return antenna_info

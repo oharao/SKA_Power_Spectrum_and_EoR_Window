@@ -8,6 +8,7 @@ from bisect import bisect_left
 
 import astropy.constants as const
 import astropy.units as u
+from astropy.cosmology import FlatLambdaCDM
 import matplotlib.pyplot as plt
 import numpy as np
 import oskar
@@ -18,7 +19,7 @@ from scipy.signal import windows
 
 
 # take in freq in Hz
-def delay_transform(name1, name2, filepath, N, freq_values, channels, baseline_mag, control=False):
+def delay_transform(name1, name2, filepath, N, freq_values, channels, baseline_mag):
     """
     Performs a delay transform on visibility data at a given frequency.
 
@@ -31,7 +32,6 @@ def delay_transform(name1, name2, filepath, N, freq_values, channels, baseline_m
         freq_values (np.ndarray): An array of floats representing the frequency values in Hz.
         channels (int): An integer representing the number of frequency channels in the visibility data.
         baseline_mag (np.ndarray): An array of floats representing the magnitude of the baseline used in the cross-correlation.
-        control (bool): A boolean value indicating whether to include or exclude baselines with zero magnitude from the output.
 
     Returns:
         np.ndarray: An array of complex numbers representing the delay transform of the visibility data.
@@ -175,17 +175,66 @@ def get_k_perp(baseline_mag_vec, freq):
     return k_perp.value
 
 
-def get_cosmological_model(H0=100, Omega_m0=0.3156):
-    from astropy.cosmology import FlatLambdaCDM
+def get_cosmological_model(H0=100.0, Omega_m0=0.3156):
+    """
+    Obtain an astropy cosmological model given the Hubble constant and dimensionless mass density parameter.
+
+    Parameters
+    ----------
+    H0 : float
+        The Hubble Constant.
+    Omega_m0 : float
+        Dimensionless Mass Density Parameter.
+
+    Returns
+    -------
+    cosmo : class astropy.cosmology.FlatLambdaCDM()
+        Class detailing the relevant calculations for a Flat Lambda CDM Universe.
+    """
     cosmo = FlatLambdaCDM(H0=H0, Om0=Omega_m0)
     return cosmo
 
 
 def get_pixel_size(z, model, pixel=3 * u.Mpc):
-    return (model.arcsec_per_kpc_comoving(z) * pixel.to(u.kpc)).to(u.deg)
+    """
+    Obtain the pixel size in degrees associated with a covael cube constructed of pixels given in cMpc.
+
+    Parameters
+    ----------
+    z : float
+        Redshift.
+    model : class astropy.cosmology.FlatLambdaCDM()
+        Astropy cosmological model.
+    pixel : astropy.units
+        The side-length of an individual pixel in cMpc.
+
+    Returns
+    -------
+    deg : astropy.units
+        The side-length of an individual pixel in degrees.
+    """
+    deg = (model.arcsec_per_kpc_comoving(z) * pixel.to(u.kpc)).to(u.deg)
+    return deg
 
 
 def get_delta_dc(freq, bandwidth, model):
+    """
+    Comoving transverse distance in Mpc at a given redshift.
+
+    Parameters
+    ----------
+    freq : np.array()
+        Frequency which the co-moving transverse distance is to be evaluated at.
+    bandwidth : float
+        Channel Bandwidth.
+    model : class astropy.cosmology.FlatLambdaCDM()
+        Astropy cosmological model.
+
+    Returns
+    -------
+    delta_dc : np.array()
+        The change in co-moving transverse distance across the channel bandwidth centered at the given frequency.
+    """
     z = 1420.0e6 / freq - 1
     z_interval = z - (1420.0e6 / (freq + bandwidth) - 1)
     delta_dc = np.abs(
@@ -195,35 +244,24 @@ def get_delta_dc(freq, bandwidth, model):
 
 
 def get_dc(freq, model):
-    z = 1420.0e6 / freq - 1
-    dc = model.comoving_transverse_distance(z)
-    return dc
-
-
-def get_Ez(z):
     """
-    Calculate the value of the E(z) function for a given redshift.
+    Comoving transverse distance in Mpc at a given redshift.
 
     Parameters
     ----------
-    z : float
-        Redshift value.
+    freq : np.array()
+        Frequency which the co-moving transverse distance is to be evaluated at.
+    model : class astropy.cosmology.FlatLambdaCDM()
+        Astropy cosmological model.
 
     Returns
     -------
-    Ez : float
-        Value of the E(z) function.
-
+    dc : np.array()
+        The co-moving transverse distance calculated at the given frequency.
     """
-    # Set cosmological parameters
-    omega_m = 0.3156
-    omega_lambda = 0.6844
-    omega_r = 8e-5
-
-    # Calculate the value of E(z)
-    Ez = np.sqrt(omega_r * (1 + z) ** 4 + omega_m * (1 + z) ** 3 + omega_lambda)
-
-    return Ez
+    z = 1420.0e6 / freq - 1
+    dc = model.comoving_transverse_distance(z)
+    return dc
 
 
 def get_vis_boundaries(sorted_baseline_mag, N=10):
@@ -261,64 +299,10 @@ def get_vis_boundaries(sorted_baseline_mag, N=10):
     return vis_position, baseline_block_boundaries
 
 
-def get_Dc_values(Dc_file):
-    """
-    Read distance values from a CSV file and return them as a numpy array.
-
-    Parameters
-    ----------
-    Dc_file : str
-        The file name (including the path) for the CSV file containing distance values.
-
-    Returns
-    -------
-    Dc_values : numpy array
-        A numpy array of distance values in float format.
-
-    """
-    # Open the CSV file and read the distance values into a list
-    with open(Dc_file, 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            Dc = row
-
-    # Convert the list of strings to a numpy array of float values
-    Dc_values = np.array(Dc, dtype=np.float64)
-
-    return Dc_values
-
-
-def get_delta_Dc_values(delta_Dc_file):
-    """
-    Read change in distance values from a CSV file and return them as a numpy array.
-
-    Parameters
-    ----------
-    delta_Dc_file : str
-        The file name (including the path) for the CSV file containing the change in distance values.
-
-    Returns
-    -------
-    delta_Dc_values : numpy array
-        A numpy array of the change in distance values in float format.
-
-    """
-    # Open the CSV file and read the change in distance values into a list
-    with open(delta_Dc_file, 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            deltaDc = row
-
-    # Convert the list of strings to a numpy array of float values
-    delta_Dc_values = np.array(deltaDc, dtype=np.float64)
-
-    return delta_Dc_values
-
-
-def get_Pd_avg_unfolded_binning(name1: str, name2: str, filepath: str,
-                                freq_values: np.ndarray, freq_interval: float, channels: int, time_samples: int,
-                                Dc: np.ndarray, delta_Dc: np.ndarray, wavelength: np.ndarray, z: float,
-                                N_bins: int) -> np.ndarray:
+def get_delay_power_spectrum(name1: str, name2: str, filepath: str,
+                             freq_values: np.ndarray, freq_interval: float, channels: int, time_samples: int,
+                             Dc: np.ndarray, delta_Dc: np.ndarray, wavelength: np.ndarray, z: float,
+                             N_bins: int) -> np.ndarray:
     """
     Computes the average power delay spectrum of a radio interferometric observation after binning the baselines.
 
@@ -600,11 +584,11 @@ def plot_eor(filepath, output_dir, min_freq, max_freq, channels, channel_bandwid
 
     N_bins = 250
 
-    gleam, delays, baselines = get_Pd_avg_unfolded_binning(gleam_name1, gleam_name2, filepath,
-                                                           freq_values, freq_interval,
-                                                           channels, observation_num_time_steps, Dc_values,
-                                                           delta_Dc_values, wavelength_values, z_values,
-                                                           N_bins)
+    gleam, delays, baselines = get_delay_power_spectrum(gleam_name1, gleam_name2, filepath,
+                                                        freq_values, freq_interval,
+                                                        channels, observation_num_time_steps, Dc_values,
+                                                        delta_Dc_values, wavelength_values, z_values,
+                                                        N_bins)
 
     limits = get_limits(gleam, Dc_values, z_values, wavelength_values, fov_angle)
 

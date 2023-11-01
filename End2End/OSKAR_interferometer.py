@@ -4,7 +4,7 @@ import os
 from astropy.time import Time, TimeDelta
 
 from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import get_cosmological_model, get_pixel_size
-from SKA_Power_Spectrum_and_EoR_Window.sky_map.gsm_gleam import composite_map
+from SKA_Power_Spectrum_and_EoR_Window.End2End.sky_map.sky_model import composite_map
 
 
 def get_start_time(ra0_deg, observation_start_time_utc, observation_length_sec):
@@ -29,8 +29,8 @@ def get_start_time(ra0_deg, observation_start_time_utc, observation_length_sec):
 
 
 def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, observation_start_time_utc,
-              observation_length_sec, observation_num_time_steps, eor=False, foregrounds=True, dc_path=None,
-              oskar_binary=True):
+              observation_length_sec, observation_num_time_steps, eor, foregrounds, gaussian_shape,
+              dc_path, oskar_binary):
     """Run a simulation of an interferometer telescope with a GLEAM sky model.
 
     Parameters
@@ -43,11 +43,11 @@ def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, ob
         The number of frequency channels to simulate.
     channel_bandwidth : float
         The bandwidth of each frequency channel in GHz.
-    eor : bool, optional
+    eor : bool
         Whether to include EoR signal in the simulation (default False).
-    foregrounds : bool, optional
+    foregrounds : bool
         Whether to include foregrounds in the simulation (default True).
-    dc_path : str, optional
+    dc_path : str
         The path to the data cube for the EoR signal (default None).
 
     Returns
@@ -71,7 +71,7 @@ def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, ob
         freq_name = "freq_%.3f_MHz" % (frequency_hz / 1e6)
         root_name = "gleam_all_%s" % freq_name
 
-        composite_sky_model = composite_map(date, frequency_hz, dc_path, eor, foregrounds)
+        composite_sky_model = composite_map(date, frequency_hz, dc_path, eor, foregrounds, gaussian_shape)
 
         # Run simulation.
         params = {

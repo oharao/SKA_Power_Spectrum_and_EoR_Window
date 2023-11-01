@@ -6,8 +6,8 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from SKA_Power_Spectrum_and_EoR_Window.End2End.Coaxial_Transmission import compute_interferometer_s21
-from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_default_script import run_oskar
+from SKA_Power_Spectrum_and_EoR_Window.End2End.coaxial_transmission import compute_interferometer_s21
+from SKA_Power_Spectrum_and_EoR_Window.End2End.OSKAR_interferometer import run_oskar
 from SKA_Power_Spectrum_and_EoR_Window.End2End.generate_EoR import plot_eor
 from SKA_Power_Spectrum_and_EoR_Window.End2End.logger import init_logger
 
@@ -63,15 +63,18 @@ def OSKAR_pipeline_run(max_freq=0.165,
 
                        intended_length=8.0,
                        length_variation=0.00,
-                       const_atten=0.0,
                        base_temperature=298.15,
                        temp_variation=0.0,
                        cable_reflections=False,
                        z_ref=55,
+                       s_s=None,
+                       s_l=None,
 
                        eor=True,
-                       dc_path='135-165MHz',  # '70-110MHz',
-                       foregrounds=False,
+                       dc_path='135-165MHz',
+
+                       foregrounds=[None],  # Available options include ['gleam', 'gsm', 'haslam']
+                       gaussian_shape=False,
 
                        delete_vis=False,
                        oskar_binary=True
@@ -122,7 +125,6 @@ def OSKAR_pipeline_run(max_freq=0.165,
     logger.info(f'Client initialised with parameters: \n Max Frequency: {max_freq} \n Min Frequency: {min_freq} \n '
                 f'Channel Bandwidth: {channel_bandwidth} \n Channels: {channels} \n Cable Length: {intended_length}'
                 f' \n Length Tolerance: {length_variation} \n '
-                f'Attenuation beads in cable (const. atten.): {const_atten} \n '
                 f'Base Temperature: {base_temperature} \n '
                 f'Temperature Max/Min Variation: {temp_variation} \n '
                 f'Cable Reflections: {cable_reflections} \n '
@@ -147,40 +149,41 @@ def OSKAR_pipeline_run(max_freq=0.165,
         logger.exception('The following exception was raised: \n ')
         raise
 
-    # Generate S21 parameters/gain_models for each antenna of the array.
-    try:
-        logger.info(f'Generating antenna S21 scattering parameters given the initial given arguments.')
-        antenna_info = compute_interferometer_s21(max_freq=max_freq,
-                                                  min_freq=min_freq,
-                                                  channels=channels,
-                                                  channel_bandwidth=channel_bandwidth,
-                                                  intended_length=intended_length,
-                                                  length_variation=length_variation,
-                                                  const_atten=const_atten,
-                                                  base_temperature=base_temperature,
-                                                  temp_variation=temp_variation,
-                                                  cable_reflections=cable_reflections,
-                                                  z_ref=z_ref,
-                                                  stations=stations)
-        logger.info(f'Success, the S21 Scattering parameters have been generated.')
-    except Exception:
-        logger.exception('The following exception was raised: \n')
-        raise
+    if cable_reflections is True:
+        # Generate S21 parameters/gain_models for each antenna of the array.
+        try:
+            logger.info(f'Generating antenna S21 scattering parameters given the initial given arguments.')
+            antenna_info = compute_interferometer_s21(max_freq=max_freq,
+                                                      min_freq=min_freq,
+                                                      channels=channels,
+                                                      channel_bandwidth=channel_bandwidth,
+                                                      intended_length=intended_length,
+                                                      length_variation=length_variation,
+                                                      base_temperature=base_temperature,
+                                                      temp_variation=temp_variation,
+                                                      z_ref=z_ref,
+                                                      s_s=s_s,
+                                                      s_l=s_l,
+                                                      stations=stations)
+            logger.info(f'Success, the S21 Scattering parameters have been generated.')
+        except Exception:
+            logger.exception('The following exception was raised: \n')
+            raise
 
-    # Save S21 scattering parameters for each telescope to the corresponding station map found in the telescope model.
-    try:
-        logger.info(f'Saving the S21 parameters for each station to the telescope model as gain_model.h5 files.')
-        for n in range(len(os.listdir(telescope_dir)) - 2):
-            rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['phasor'].values
-            data = []
-            [data.append(np.array(rows[i])) for i in range(len(rows))]
-            to_hdf5(list(np.array([np.transpose(data)])),
-                    np.arange(min_freq * 1e9, max_freq * 1e9, channel_bandwidth * 1e9),
-                    date + '_telescope_model/station' + str(n).rjust(3, '0'))
-        logger.info('Success, telescope model now includes antenna gain models in the form of S21 parameters. \n')
-    except Exception:
-        logger.exception('The following exception was raised: \n')
-        raise
+        # Save the S-parameters for each element corresponding to the station map described by the telescope model.
+        try:
+            logger.info(f'Saving the S21 parameters for each station to the telescope model as gain_model.h5 files.')
+            for n in range(len(os.listdir(telescope_dir)) - 2):
+                rows = antenna_info[pd.DataFrame(antenna_info.station.tolist()).isin([n]).values]['phasor'].values
+                data = []
+                [data.append(np.array(rows[i])) for i in range(len(rows))]
+                to_hdf5(list(np.array([np.transpose(data)])),
+                        np.arange(min_freq * 1e9, max_freq * 1e9, channel_bandwidth * 1e9),
+                        date + '_telescope_model/station' + str(n).rjust(3, '0'))
+            logger.info('Success, telescope model now includes antenna gain models in the form of S21 parameters. \n')
+        except Exception:
+            logger.exception('The following exception was raised: \n')
+            raise
 
     # Run OSKAR using the given telescope model.
     try:
@@ -188,7 +191,8 @@ def OSKAR_pipeline_run(max_freq=0.165,
 
         # Run OSKAR for the generated telescope model.
         run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, observation_start_time_utc,
-                  observation_length_sec, observation_num_time_steps, eor, foregrounds, dc_path, oskar_binary)
+                  observation_length_sec, observation_num_time_steps, eor, foregrounds, gaussian_shape, dc_path,
+                  oskar_binary)
 
         logger.info(f'Success, OSKAR visibilities have been generated to {date}_vis. \n')
     except Exception:
