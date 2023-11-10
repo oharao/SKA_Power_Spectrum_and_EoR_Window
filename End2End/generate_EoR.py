@@ -50,7 +50,7 @@ def delay_transform(name1, name2, filepath, N, freq_values, channels, baseline_m
     vis_data = np.zeros([channels, N], dtype=complex)
 
     for k in range(channels):
-        freq = '%0.3f' % float((freq_values / 1e6)[k])
+        freq = '%0.4f' % float((freq_values / 1e6)[k])
 
         (header, handle) = oskar.VisHeader.read(filepath + "/" + name1 + freq + name2)
         block = oskar.VisBlock.create_from_header(header)
@@ -87,7 +87,7 @@ def get_baselines_mag(name1, name2, filepath, freq_values):
     This function reads simulated visibility data for the given frequency channel, extracts the baseline
     coordinates and calculates the magnitude of each baseline. It then returns an array of baseline magnitudes.
     """
-    freq = '%0.3f' % float((freq_values / 1e6)[0])
+    freq = '%0.4f' % float((freq_values / 1e6)[0])
 
     print(filepath + "/" + name1 + freq + name2)
     (header, handle) = oskar.VisHeader.read(filepath + "/" + name1 + freq + name2)
@@ -579,7 +579,7 @@ def plot_eor(filepath, output_dir, min_freq, max_freq, channels, channel_bandwid
     wavelength_values = 3e8 / freq_values
     z_values = 1420.0e6 / freq_values - 1
 
-    gleam_name1 = "gleam_all_freq_"
+    gleam_name1 = "freq_"
     gleam_name2 = "_MHz.vis"
 
     cosmo = get_cosmological_model()

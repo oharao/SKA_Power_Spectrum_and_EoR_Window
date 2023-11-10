@@ -93,8 +93,8 @@ def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, ob
     for c in range(num_channels):
         # Get the FITS filename.
         frequency_hz = start_frequency_hz + c * frequency_inc_hz
-        freq_name = "freq_%.3f_MHz" % (frequency_hz / 1e6)
-        root_name = "gleam_all_%s" % freq_name
+        freq_name = "freq_%.4f_MHz" % (frequency_hz / 1e6)
+        root_name = "%s" % freq_name
 
         composite_sky_model = composite_map(date, frequency_hz, dc_path, eor, foregrounds, gaussian_shape)
 
