@@ -39,7 +39,7 @@ def get_start_time(ra0_deg, observation_start_time_utc, observation_length_sec):
     return start.value
 
 
-def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, observation_start_time_utc,
+def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, fov, observation_start_time_utc,
               observation_length_sec, observation_num_time_steps, eor, foregrounds, gaussian_shape,
               dc_path, oskar_binary):
     """Run a simulation of an interferometer telescope with a GLEAM sky model.
@@ -96,7 +96,8 @@ def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, ob
         freq_name = "freq_%.4f_MHz" % (frequency_hz / 1e6)
         root_name = "%s" % freq_name
 
-        composite_sky_model = composite_map(date, frequency_hz, dc_path, eor, foregrounds, gaussian_shape)
+        composite_sky_model = composite_map(date, frequency_hz, dc_path, ra0_deg, dec0_deg, fov, eor, foregrounds,
+                                            gaussian_shape)
 
         # Run simulation.
         params = {
@@ -119,6 +120,7 @@ def run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, ob
             "interferometer/max_time_samples_per_block": 1,
             "interferometer/channel_bandwidth_hz": frequency_inc_hz,
             "interferometer/time_average_sec": 0.9,
+            "telescope/allow_station_beam_duplication": False,
         }
 
         if eor is True:

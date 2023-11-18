@@ -66,6 +66,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
                        channels=160,
                        ra0_deg=60.0,
                        dec0_deg=-30.0,
+                       fov=90,
 
                        stations='antenna_pos_core/',
 
@@ -85,7 +86,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
                        eor=True,
                        dc_path='135-165MHz',
 
-                       foregrounds=[None],  # Available options include ['gleam', 'gsm', 'haslam']
+                       foregrounds=[],  # Available options include ['gleam', 'gsm', 'haslam']
                        gaussian_shape=False,
 
                        delete_vis=False,
@@ -202,7 +203,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
         logger.info('Running OSKAR interferometer simulations with the given telescope model.')
 
         # Run OSKAR for the generated telescope model.
-        run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, observation_start_time_utc,
+        run_oskar(date, min_freq, channels, channel_bandwidth, ra0_deg, dec0_deg, fov, observation_start_time_utc,
                   observation_length_sec, observation_num_time_steps, eor, foregrounds, gaussian_shape, dc_path,
                   oskar_binary)
 

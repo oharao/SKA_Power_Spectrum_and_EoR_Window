@@ -8,7 +8,6 @@ Included are function to broaden the healpix diffuse emmission to potentially de
     osdo2@cam.ac.uk
 """
 
-
 import os
 
 import astropy.units as u
@@ -21,7 +20,7 @@ from pygdsm import HaslamSkyModel, GlobalSkyModel16
 
 
 def gleam():
-    gleam_data = fits.getdata("SKA_Power_Spectrum_and_EoR_Window/sky_map/GLEAM_EGC_v2.fits", 1)
+    gleam_data = fits.getdata("SKA_Power_Spectrum_and_EoR_Window/End2End/sky_map/GLEAM_EGC_v2.fits", 1)
     RAdeg = gleam_data['RAJ2000']
     DEdeg = gleam_data['DEJ2000']
     flux = np.nan_to_num(gleam_data['int_flux_076'])
@@ -66,7 +65,7 @@ def gaussian_broadening(sky_map, scale=1.5, nside=1024):
     return oskar.Sky.from_array(sky_map_array)
 
 
-def composite_map(date, frequency_hz, dc_path, eor=True, foregrounds=None, gaussian_shape=False):
+def composite_map(date, frequency_hz, dc_path, ra0_deg, dec0_deg, fov=90, eor=True, foregrounds=[], gaussian_shape=False):
     freq_name = "freq_%.3f_MHz" % (frequency_hz / 1e6)
 
     try:
@@ -80,12 +79,8 @@ def composite_map(date, frequency_hz, dc_path, eor=True, foregrounds=None, gauss
         gleam_map = oskar.Sky.from_array(gleam())
         composite_sky_model.append(gleam_map)
 
-    if None in foregrounds:
-        if 'gsm' in foregrounds:
-            foreground_path, units = gsm(date, frequency_hz / 1e6)
-        elif 'haslam' in foregrounds:
-            foreground_path, units = haslam(date, frequency_hz / 1e6)
-
+    if 'gsm' in foregrounds:
+        foreground_path, units = gsm(date, frequency_hz / 1e6)
         diffuse_map = oskar.Sky.from_fits_file(foreground_path, default_map_units=units,
                                                override_units=True, frequency_hz=frequency_hz)
         os.remove(foreground_path)
@@ -93,6 +88,14 @@ def composite_map(date, frequency_hz, dc_path, eor=True, foregrounds=None, gauss
             diffuse_map = gaussian_broadening(diffuse_map)
         composite_sky_model.append(diffuse_map)
 
+    elif 'haslam' in foregrounds:
+        foreground_path, units = haslam(date, frequency_hz / 1e6)
+        diffuse_map = oskar.Sky.from_fits_file(foreground_path, default_map_units=units,
+                                               override_units=True, frequency_hz=frequency_hz)
+        os.remove(foreground_path)
+        if gaussian_shape is True:
+            diffuse_map = gaussian_broadening(diffuse_map)
+        composite_sky_model.append(diffuse_map)
 
     if eor is True:
         root_path = 'SKA_Power_Spectrum_and_EoR_Window/comoving/' + dc_path
@@ -102,4 +105,5 @@ def composite_map(date, frequency_hz, dc_path, eor=True, foregrounds=None, gauss
 
         composite_sky_model.append(eor_map)
 
+    composite_sky_model.filter_by_radius(ra0_deg=ra0_deg, dec0_deg=dec0_deg, inner_radius_deg=0, outer_radius_deg=fov)
     return composite_sky_model
