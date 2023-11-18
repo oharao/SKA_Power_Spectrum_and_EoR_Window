@@ -256,7 +256,7 @@ class cable_decay:
             # Complex Linear Gain
             gain = np.transpose(ntwk.s, (1, 2, 0))[1, 0, :]
         else:
-            gain = np.abs(S_21)
+            gain = S_21
         return gain
 
 

@@ -474,7 +474,7 @@ def plot_lognorm(limits, gleam, name, delay, baselines, vmax=1e14, vmin=1e-8, cm
     ax1 = plt.subplot2grid((12, 10), (2, 0), rowspan=10, colspan=6)
 
     pcm = ax1.pcolormesh(k_perp_plot, k_parallel_plot,
-                         P_d_gleam, cmap=cmap, norm=LogNorm(vmin=vmin, vmax=vmax))
+                         P_d_gleam, cmap=cmap, norm=LogNorm(vmin=vmin, vmax=vmax), shading='auto')
     ax1.set_xlim(k_perp_plot.min(), k_perp_plot.max() / 1.3)
     ax1.set_ylim(k_parallel_plot[k_par_index], k_parallel_plot.max())
 
