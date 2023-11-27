@@ -142,6 +142,7 @@ def OSKAR_pipeline_run(max_freq=0.165,
                 f'Base Temperature: {base_temperature} \n '
                 f'Temperature Max/Min Variation: {temp_variation} \n '
                 f'Cable Reflections: {cable_reflections} \n '
+                f'Cable losses: {loss} \n '
                 f'Ref Impedance: {z_ref} \n '
                 f'Path to directory containing the co-moving Mpc in local observable coordinates: {dc_path} \n'
                 f'Station Layout Directory: {stations} \n '
