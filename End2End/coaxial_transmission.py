@@ -26,7 +26,7 @@ class cable_decay:
     This Class calculates these properties and S21 parameters as a function of length & temperture.
     """
 
-    def __init__(self, max_freq, min_freq, channels, channel_bandwidth, a, b, c, rho_in, rho_out, mu_in, mu_out,
+    def __init__(self, max_freq, min_freq, channels, channel_bandwidth, a, b, c, loss, rho_in, rho_out, mu_in, mu_out,
                  roughness, eps_dielectric, rho_dielectric, mu_dielectric, tcr_in, tcr_out, z_ref, s_s, s_l):
         """
         Initializes the cable_decay class.
@@ -39,6 +39,7 @@ class cable_decay:
             - a (float): Inner conductor radius (mm).
             - b (float): Outer conductor radius (mm).
             - c (float): Dielectric radius (mm).
+            - loss (bool): Determine whether the cable is lossless (False) or lossy (True).
             - rho_in (float): Inner conductor resistivity (Ohm.m).
             - rho_out (float): Outer conductor resistivity (Ohm.m).
             - mu_in (float): Inner conductor permeability (H/m).
@@ -59,6 +60,7 @@ class cable_decay:
         self.a = a
         self.b = b
         self.c = c
+        self.loss = loss
         self.rho_in = rho_in
         self.rho_out = rho_out
         self.mu_in = mu_in * const.mu_0  # Convert to core permeability.
@@ -193,8 +195,11 @@ class cable_decay:
         self.capacitance (float): The capacitance of the transmission line.
         self.angular_frequencies (float): The angular frequency of the transmission line in radians per second.
         """
-        self.z_0 = np.sqrt((self.resistance + 1j * self.angular_frequencies * self.inductance) / (
-                self.conductance + 1j * self.angular_frequencies * self.capacitance))
+        if self.loss == True:
+            self.z_0 = np.sqrt((self.resistance + 1j * self.angular_frequencies * self.inductance) / (
+                    self.conductance + 1j * self.angular_frequencies * self.capacitance))
+        else:
+            self.z_0 = np.sqrt(self.inductance / self.capacitance)
         return self.z_0
 
     def get_S21(self, length, temp):
@@ -382,7 +387,7 @@ def perlin_noise_map(shape=(1000, 1000), scale=np.random.uniform(800.0, 1200.0),
     return world
 
 
-def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, intended_length, length_variation,
+def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, loss, intended_length, length_variation,
                                base_temperature, temp_variation, z_ref, s_s, s_l, stations):
     """
     Compute the S21 signal for a radio interferometer system.
@@ -422,7 +427,7 @@ def compute_interferometer_s21(max_freq, min_freq, channels, channel_bandwidth, 
 
     # Initalise an RG58 Coaxial Cable across the 1480 channels spaning freq bandwidth [72.0, 108.975]MHz.
     ska = cable_decay(max_freq=max_freq, min_freq=min_freq, channels=channels, channel_bandwidth=channel_bandwidth,
-                      a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.71e-8, rho_out=1.71e-8,
+                      loss=loss, a=0.0004572, b=0.0014732, c=0.0017272, rho_in=1.71e-8, rho_out=1.71e-8,
                       mu_in=1.0, mu_out=1.0, roughness=0.0, eps_dielectric=2.12, rho_dielectric=1e18,
                       mu_dielectric=1, tcr_in=0.00404, tcr_out=0.00404, z_ref=z_ref, s_s=s_s, s_l=s_l)
 

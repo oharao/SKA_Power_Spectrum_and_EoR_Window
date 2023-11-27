@@ -1,4 +1,4 @@
-FROM fdulwich/oskar-python3:2.9.1
+FROM fdulwich/oskar-python3:2.9.2
 
 RUN apt-get update
 RUN apt-get install -y git make g++ gcc python wget python3-pip
