@@ -174,8 +174,11 @@ class cable_decay:
         Parameters:
         self (object): The object representing the cylindrical transmission line.
         """
-        self.gamma = np.sqrt((self.resistance + 1j * self.angular_frequencies * self.inductance) * (
-                self.conductance + 1j * self.angular_frequencies * self.capacitance))
+        if self.loss == True:
+            self.gamma = np.sqrt((self.resistance + 1j * self.angular_frequencies * self.inductance) * (
+                    self.conductance + 1j * self.angular_frequencies * self.capacitance))
+        else:
+            self.gamma = 1j*self.angular_frequencies * np.sqrt(self.inductance * self.capacitance)
         self.phase_const = self.gamma.imag
         self.attenuation = self.gamma.real
         return self.phase_const
